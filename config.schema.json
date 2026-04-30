@@ -1,19 +1,19 @@
 {
     "pluginAlias": "NordpoolCheapestRange",
     "pluginType": "platform",
-    "headerDisplay": "config.headerDisplay",
+    "headerDisplay": "Nordpool Cheapest Range",
     "schema": {
         "type": "object",
         "properties": {
             "name": {
-                "title": "config.name.title",
+                "title": "Plugin Name",
                 "type": "string",
                 "required": true,
                 "default": "Nordpool",
-                "description": "config.name.description"
+                "description": "Display name for the plugin"
             },
             "area": {
-                "title": "config.area.title",
+                "title": "Area",
                 "type": "string",
                 "required": true,
                 "default": "FI",
@@ -64,7 +64,7 @@
                 ]
             },
             "decimalPrecision": {
-                "title": "config.precision.title",
+                "title": "Decimal Precision",
                 "type": "integer",
                 "default": 1,
                 "oneOf": [
@@ -89,33 +89,33 @@
                 ]
             },
             "devices": {
-                "title": "config.devices.title",
+                "title": "Devices",
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "name": {
-                            "title": "config.device.name.title",
+                            "title": "Device Name",
                             "type": "string",
                             "required": true
                         },
                         "cheapestHours": {
-                            "title": "config.device.hours.title",
+                            "title": "Cheapest Hours",
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 24,
                             "default": 3,
-                            "description": "config.device.hours.description"
+                            "description": "Number of cheapest hours to find"
                         },
                         "rangeStart": {
-                            "title": "config.device.start.title",
+                            "title": "Range Start (Hour)",
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 23,
                             "default": 0
                         },
                         "rangeEnd": {
-                            "title": "config.device.end.title",
+                            "title": "Range End (Hour)",
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 23,
