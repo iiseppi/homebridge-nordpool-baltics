@@ -7,7 +7,7 @@ import { Cache } from 'file-system-cache';
 /* eslint @typescript-eslint/no-var-requires: "off" */
 const pkg = require('../package.json');
 
-// Päivitetty vastaamaan uutta nimeä
+// Platform constants updated for the new plugin name
 export const PLATFORM_NAME = 'NordpoolCheapestRange';
 export const PLUGIN_NAME = pkg.name;
 export const PLATFORM_MANUFACTURER = pkg.author.name || 'iiseppi';
@@ -18,15 +18,15 @@ export const PLATFORM_SERIAL_NUMBER = 'NPS-RANGE-2026';
 export interface SensorType { [key: string]: Service | null }
 
 export interface NordpoolData {
-  day: string;
+  day: number; // Stored as day of month for easy comparison
   hour: number;
   price: number;
 }
 
 /**
- * Yksinkertaistettu Pricing-rajapinta.
- * Koska jokainen laite laskee omat halvat tuntinsa lennosta,
- * tarvitsemme globaalisti vain raaka-datan ja nykyhetken perustiedot.
+ * Simplified Pricing interface.
+ * Since each device calculates its own cheap hours on the fly,
+ * we globally provide raw data and current state info.
  */
 export interface Pricing {
   today: NordpoolData[];
@@ -43,25 +43,25 @@ export let pricing: Pricing = {
 };
 
 /**
- * Poistettu kiinteät sensorit (cheapest4h jne.)
- * Palvellaan vain perusrakennetta.
+ * Default structure for sensors.
  */
 export const defaultService: SensorType = {
   currently: null,
 };
 
 /**
- * Välimuistin asetukset. Päivitetty uusi namespace (ns).
+ * Cache settings. Updated namespace (ns) and storage logic.
  */
 export function defaultPricesCache(api: API, log: Logging) {
   const ns = 'homebridge-nordpool-cheapest-range';
-  const nsHash = 'npr-8c8d8b8a8b8c8d8e8f'; // Uusi tunniste välimuistitiedostoille
+  const nsHash = 'npr-8c8d8b8a8b8c8d8e8f'; // Identifier for cache files
 
   const storagePath = api.user.storagePath();
   const cacheDirectory = Path.join(storagePath, '.cache');
   const fallbackDirectory = storagePath;
   let finalCacheDirectory = cacheDirectory;
 
+  // Ensure cache directory exists and is writable
   try {
     if (!fs.existsSync(cacheDirectory)) {
       fs.mkdirSync(cacheDirectory, { recursive: true });
@@ -73,11 +73,11 @@ export function defaultPricesCache(api: API, log: Logging) {
     finalCacheDirectory = fallbackDirectory;
   }
 
-  // Siivotaan vanhat välimuistitiedostot (yli 2 päivää vanhat)
+  // Cleanup old cache files (older than 2 days)
   try {
     const files = fs.readdirSync(finalCacheDirectory);
     const now = Date.now();
-    files.filter(file => file.startsWith(`${nsHash}-`)).forEach(file => {
+    files.filter(file => file.includes(ns)).forEach(file => {
       const filePath = Path.join(finalCacheDirectory, file);
       const stats = fs.statSync(filePath);
       if (now - stats.mtimeMs >= 172800 * 1000) {
@@ -92,7 +92,7 @@ export function defaultPricesCache(api: API, log: Logging) {
 }
 
 /**
- * Aikavyöhykeasetukset. Pidetty ennallaan, jotta Nordpool-data kohdistuu oikein.
+ * Timezone mapping based on Nordpool market areas.
  */
 export function defaultAreaTimezone(config: PlatformConfig): string {
   const area = (config.area || 'FI').toUpperCase();
@@ -110,16 +110,25 @@ export function defaultAreaTimezone(config: PlatformConfig): string {
   return timezoneMapping[area] || 'Europe/Helsinki';
 }
 
+/**
+ * Returns cache key for today's date in the correct timezone.
+ */
 export function fnc_todayKey(config: PlatformConfig) {
   const timezone = defaultAreaTimezone(config);
   return DateTime.local().setZone(timezone).toFormat('yyyy-MM-dd');
 }
 
+/**
+ * Returns cache key for tomorrow's date in the correct timezone.
+ */
 export function fnc_tomorrowKey(config: PlatformConfig) {
   const timezone = defaultAreaTimezone(config);
   return DateTime.local().plus({ day: 1 }).setZone(timezone).toFormat('yyyy-MM-dd');
 }
 
+/**
+ * Returns current hour in the correct timezone.
+ */
 export function fnc_currentHour(config: PlatformConfig) {
   const timezone = defaultAreaTimezone(config);
   return DateTime.local().setZone(timezone).hour;
