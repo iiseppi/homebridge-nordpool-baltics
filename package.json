@@ -36,8 +36,7 @@
     },
     "files": [
         "dist",
-        "config.schema.json",
-        "i18n"
+        "config.schema.json"
     ],
     "main": "dist/index.js",
     "scripts": {
