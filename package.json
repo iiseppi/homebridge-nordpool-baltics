@@ -46,6 +46,7 @@
         "watch": "npm run build && npm link && nodemon",
         "test": "jest --passWithNoTests && eslint src/**.ts --no-warn-ignored --max-warnings=10",
         "build": "rimraf ./dist && tsc",
+        "prepare": "npm run build",
         "prepublishOnly": "npm run lint && npm run build",
         "deploylocal": "npm run build && npm link && sudo hb-service restart"
     },
