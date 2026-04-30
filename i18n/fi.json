@@ -1,13 +1,33 @@
 {
-    "config.headerDisplay": "Nordpool-hintojen optimointi",
-    "config.name.title": "Bridgen nimi",
-    "config.name.description": "Nimi, joka näkyy Homebridge-logeissa ja Koti-sovelluksessa.",
-    "config.area.title": "Markkina-alue",
-    "config.precision.title": "Hinnan tarkkuus",
-    "config.devices.title": "Optimoidut laitteet",
-    "config.device.name.title": "Laitteen nimi",
-    "config.device.hours.title": "Halvimpien tuntien määrä",
-    "config.device.hours.description": "Kuinka monta halvinta tuntia valitaan määritetystä aikaikkunasta.",
-    "config.device.start.title": "Aikaikkunan alku (0-23)",
-    "config.device.end.title": "Aikaikkunan loppu (0-23)"
+    "config": {
+        "headerDisplay": "Nordpool-hintojen optimointi",
+        "name": {
+            "title": "Bridgen nimi",
+            "description": "Nimi, joka näkyy Homebridge-logeissa ja Koti-sovelluksessa."
+        },
+        "area": {
+            "title": "Markkina-alue"
+        },
+        "precision": {
+            "title": "Hinnan tarkkuus"
+        },
+        "devices": {
+            "title": "Optimoidut laitteet"
+        },
+        "device": {
+            "name": {
+                "title": "Laitteen nimi"
+            },
+            "hours": {
+                "title": "Halvimpien tuntien määrä",
+                "description": "Kuinka monta halvinta tuntia valitaan määritetystä aikaikkunasta."
+            },
+            "start": {
+                "title": "Aikaikkunan alku (0-23)"
+            },
+            "end": {
+                "title": "Aikaikkunan loppu (0-23)"
+            }
+        }
+    }
 }
