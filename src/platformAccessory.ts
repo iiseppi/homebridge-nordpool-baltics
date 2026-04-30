@@ -1,4 +1,4 @@
-import { PlatformAccessory, API, Logging, Service, CharacteristicValue } from 'homebridge';
+import { PlatformAccessory, API, Logging, Service } from 'homebridge';
 import { NordpoolPlatform } from './platform';
 import { fnc_todayKey, fnc_tomorrowKey, defaultPricesCache } from './settings';
 import { schedule } from 'node-cron';
@@ -38,7 +38,7 @@ export class NordpoolPlatformAccessory {
       log: this.platform.log,
       storage: 'fs',
       path: this.api.user.storagePath() + '/accessories',
-      filename: `history_${this.accessory.UUID}.json`
+      filename: `history_${this.accessory.UUID}.json`,
     });
 
     // Initial status check
@@ -53,16 +53,23 @@ export class NordpoolPlatformAccessory {
 
   async updateStatus() {
     const todayKey = fnc_todayKey(this.platform.config);
-    const cachedToday = await this.pricesCache.get(todayKey);
+    const tomorrowKey = fnc_tomorrowKey(this.platform.config);
 
-    if (!Array.isArray(cachedToday) || cachedToday.length === 0) {
+    // Fetch prices for today and tomorrow to handle overnight ranges
+    const cachedToday = await this.pricesCache.get(todayKey) || [];
+    const cachedTomorrow = await this.pricesCache.get(tomorrowKey) || [];
+
+    // Combine price data
+    const allPrices = [...cachedToday, ...cachedTomorrow];
+
+    if (allPrices.length === 0) {
       this.platform.log.warn(`[${this.deviceConfig.name}] No price data available in cache yet.`);
       return;
     }
 
-    const isCurrentlyOn = this.calculateCheapestStatus(cachedToday);
+    const isCurrentlyOn = this.calculateCheapestStatus(allPrices);
 
-    // HomeKit ContactSensor: 0 = DETECTED (Off/Expensive), 1 = NOT_DETECTED (On/Cheap)
+    // HomeKit ContactSensor: 0 = DETECTED (Expensive), 1 = NOT_DETECTED (Cheap/On)
     const characteristic = this.platform.Characteristic.ContactSensorState;
     const value = isCurrentlyOn
       ? this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
@@ -71,48 +78,50 @@ export class NordpoolPlatformAccessory {
     this.service.updateCharacteristic(characteristic, value);
 
     // Log the state change to Fakegato history (1 = Open/Cheap, 0 = Closed/Expensive)
-    const historyStatus = isCurrentlyOn ? 1 : 0;
     this.historyService.addEntry({
-      time: Math.round(new Date().valueOf() / 1000), // Current Unix timestamp
-      status: historyStatus
+      time: Math.round(new Date().valueOf() / 1000),
+      status: isCurrentlyOn ? 1 : 0,
     });
 
-    // Updated log message to be clearer
     this.platform.log.info(`[${this.deviceConfig.name}] Status update: ${isCurrentlyOn ? 'ON (Cheap)' : 'OFF (Expensive)'}`);
   }
 
-  calculateCheapestStatus(prices: any[]): boolean {
-    const currentHour = new Date().getHours();
+  calculateCheapestStatus(allPrices: any[]): boolean {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentDay = now.getDate();
     const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
 
-    // 1. Filter hours based on the defined time window
-    const windowPrices = prices.filter(p => {
-      if (rangeStart <= rangeEnd) {
-        // Normal time window (e.g., 08-16)
-        return p.hour >= rangeStart && p.hour <= rangeEnd;
-      } else {
-        // Overnight time window (e.g., 23-06)
-        return p.hour >= rangeStart || p.hour <= rangeEnd;
-      }
-    });
+    let targetHours: any[] = [];
 
-    if (windowPrices.length === 0) {
+    // 1. Filter hours based on the defined time window
+    if (rangeStart <= rangeEnd) {
+      // Normal time window (e.g., 08-16) - focus on today only
+      targetHours = allPrices.filter(p => p.day === currentDay && p.hour >= rangeStart && p.hour <= rangeEnd);
+    } else {
+      // Overnight time window (e.g., 22-06) - compare tonight with tomorrow morning
+      targetHours = allPrices.filter(p => {
+        const isTonight = p.day === currentDay && p.hour >= rangeStart;
+        const isTomorrowMorning = p.day !== currentDay && p.hour <= rangeEnd;
+        return isTonight || isTomorrowMorning;
+      });
+    }
+
+    if (targetHours.length === 0) {
       return false;
     }
 
-    // 2. Sort by price (cheapest first)
-    const sortedWindow = [...windowPrices].sort((a, b) => a.price - b.price);
+    // 2. Sort the relevant window by price (cheapest first)
+    const sortedWindow = [...targetHours].sort((a, b) => a.price - b.price);
 
-    // 3. Pick the top X cheapest hours
-    const cheapestHoursArray = sortedWindow
-      .slice(0, Math.min(cheapestHours, windowPrices.length))
-      .map(p => p.hour);
+    // 3. Pick the top X cheapest hours from the target window
+    const cheapestHoursArray = sortedWindow.slice(0, Math.min(cheapestHours, targetHours.length));
 
-    // Debug logging
-    this.platform.log.debug(`[${this.deviceConfig.name}] Time window hours: ${windowPrices.map(p => p.hour).join(',')}`);
-    this.platform.log.debug(`[${this.deviceConfig.name}] Cheapest hours in window: ${cheapestHoursArray.join(',')}`);
+    // Debug logging for troubleshooting
+    this.platform.log.debug(`[${this.deviceConfig.name}] Window size: ${targetHours.length}h, Target cheapest: ${cheapestHours}h`);
+    this.platform.log.debug(`[${this.deviceConfig.name}] Cheapest hours in current/next window: ${cheapestHoursArray.map(p => p.hour).join(',')}`);
 
-    // 4. Check if the current hour is among the selected cheapest hours
-    return cheapestHoursArray.includes(currentHour);
+    // 4. Check if the current hour (and day) is among the selected cheapest hours
+    return cheapestHoursArray.some(p => p.hour === currentHour && p.day === currentDay);
   }
 }
