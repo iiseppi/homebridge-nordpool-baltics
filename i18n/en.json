@@ -1,0 +1,13 @@
+{
+    "config.headerDisplay": "Nordpool Price Optimization",
+    "config.name.title": "Bridge Name",
+    "config.name.description": "Name shown in Homebridge logs and the Home app.",
+    "config.area.title": "Market Area",
+    "config.precision.title": "Price Precision",
+    "config.devices.title": "Optimized Devices",
+    "config.device.name.title": "Device Name",
+    "config.device.hours.title": "Number of Cheapest Hours",
+    "config.device.hours.description": "How many cheap hours to pick within the defined time window.",
+    "config.device.start.title": "Time window Start (0-23)",
+    "config.device.end.title": "Time window End (0-23)"
+}

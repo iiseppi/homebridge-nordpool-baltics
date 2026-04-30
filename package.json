@@ -34,6 +34,11 @@
         "node": "^18.17.0 || ^20.9.0 || ^22.11.0 || ^24.0.0",
         "homebridge": "^1.6.0 || ^2.0.0-beta.20"
     },
+    "files": [
+        "dist",
+        "config.schema.json",
+        "i18n"
+    ],
     "main": "dist/index.js",
     "scripts": {
         "lint:md": "markdownlint '*.md'",
@@ -81,6 +86,7 @@
         "@types/ramda": "^0.29.10",
         "asciichart": "^1.5.25",
         "axios": "^1.6.7",
+        "fakegato-history": "^0.6.0",
         "file-system-cache": "^2.4.4",
         "luxon": "^3.4.4",
         "node-cron": "^3.0.3",
