@@ -1,153 +1,97 @@
-import { PlatformAccessory, API, Logging } from 'homebridge';
+import { PlatformAccessory, API, Logging, Service, CharacteristicValue } from 'homebridge';
 import { NordpoolPlatform } from './platform';
-
-import {
-  pricing, defaultService, defaultPricesCache,
-  fnc_todayKey, fnc_tomorrowKey, fnc_currentHour,
-} from './settings';
-
-import { Functions } from './functions';
+import { fnc_todayKey, fnc_tomorrowKey, defaultPricesCache } from './settings';
 import { schedule } from 'node-cron';
 
 export class NordpoolPlatformAccessory {
-
-  private decimalPrecision = this.platform.config.decimalPrecision ?? 1;
-  private dynamicCheapestConsecutiveHours:boolean = this.platform.config.dynamicCheapestConsecutiveHours ?? false;
-  private service = defaultService;
+  private service: Service;
   private pricesCache = defaultPricesCache(this.api, this.platform.log as Logging);
-  private fnc = new Functions(this.platform, this.accessory, this.service, this.api);
+  private deviceConfig: { name: string, cheapestHours: number, rangeStart: number, rangeEnd: number };
 
   constructor(
     private readonly platform: NordpoolPlatform,
     private readonly accessory: PlatformAccessory,
     private readonly api: API,
   ) {
+    // Haetaan laitekohtaiset asetukset contextista
+    this.deviceConfig = accessory.context.device;
 
-    this.fnc.initAccessories()
-      .then(() => {
-        this.getPrices();
+    // Asetetaan laitteen tiedot
+    this.accessory.getService(this.platform.Service.AccessoryInformation)!
+      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Nordpool')
+      .setCharacteristic(this.platform.Characteristic.Model, 'Dynamic Price Sensor')
+      .setCharacteristic(this.platform.Characteristic.SerialNumber, this.accessory.UUID);
 
-        schedule('0 * * * *', () => {
-          this.getPrices();
-        });
-      })
-      .catch((error) => {
-        this.platform.log.error(error);
-      });
+    // Käytetään Contact Sensor -tyyppiä (yleisin näissä plugineissa)
+    // Jos haluat Switchin, vaihda Service.ContactSensor -> Service.Switch
+    this.service = this.accessory.getService(this.platform.Service.ContactSensor) ||
+      this.accessory.addService(this.platform.Service.ContactSensor);
+
+    this.service.setCharacteristic(this.platform.Characteristic.Name, this.deviceConfig.name);
+
+    // Käynnistetään hintojen haku ja asetetaan kronometri tunnin välein
+    this.updateStatus();
+
+    schedule('0 * * * *', () => {
+      this.platform.log.info(`[${this.deviceConfig.name}] Hourly update triggered.`);
+      this.updateStatus();
+    });
   }
 
-  async getPrices() {
+  async updateStatus() {
     const todayKey = fnc_todayKey(this.platform.config);
-    const tomorrowKey = fnc_tomorrowKey(this.platform.config);
-    const currentHour = fnc_currentHour(this.platform.config);
-
-    // did precision config change?
-    // if changed: clear cache and reload the data from Nordpool prices provider
-    const decimalPrecisionCache = await this.pricesCache.get('decimalPrecision');
-    if (decimalPrecisionCache !== this.decimalPrecision) {
-      try {
-        await this.pricesCache.remove(todayKey);
-        await this.pricesCache.remove(tomorrowKey);
-        await this.pricesCache.remove('5consecutiveUpdated');
-        await this.pricesCache.remove(`solarOverrideApplied_${todayKey}`);
-      } catch (error) {
-        this.platform.log.error(`ERR: failed clearing pricesCache: ${JSON.stringify(error)}`);
-      } finally {
-        this.platform.log.warn(
-          `Configured Decimal Precision changed from ${decimalPrecisionCache} to ${this.decimalPrecision}`,
-        );
-        this.pricesCache.set('decimalPrecision', this.decimalPrecision);
-      }
-      // 1s wait to ensure cache files are deleted before proceeding
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    const areaCache = await this.pricesCache.get('area');
-    if (this.platform.config.area !== undefined && areaCache !== this.platform.config.area) {
-      try {
-        await this.pricesCache.remove(todayKey);
-        await this.pricesCache.remove(tomorrowKey);
-        await this.pricesCache.remove('5consecutiveUpdated');
-        await this.pricesCache.remove(`solarOverrideApplied_${todayKey}`);
-      } catch (error) {
-        this.platform.log.error(`ERR: failed clearing pricesCache: ${JSON.stringify(error)}`);
-      } finally {
-        this.platform.log.warn(
-          `Configured Nordpool area changed from ${areaCache} to ${this.platform.config.area}`,
-        );
-        this.pricesCache.set('area', this.platform.config.area);
-      }
-      // 1s wait to ensure cache files are deleted before proceeding
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
     const cachedToday = await this.pricesCache.get(todayKey);
-    const cachedTomorrow = await this.pricesCache.get(tomorrowKey);
-    const todayExists = Array.isArray(cachedToday) && cachedToday.length > 0;
-    const tomorrowExists = Array.isArray(cachedTomorrow) && cachedTomorrow.length > 0;
 
-    this.platform.log.debug(`Cache stats: ${JSON.stringify({
-      todayExists: todayExists,
-      tomorrowExists: tomorrowExists,
-      cacheDir: this.pricesCache.basePath,
-    })}`);
-
-    if (!todayExists || (currentHour >= 18 && !tomorrowExists)) {
-      this.fnc.pullNordpoolData()
-        .then(async (results) => {
-          if (results) {
-            let todayResults = results.filter(result => result.day === todayKey);
-            let tomorrowResults = results.filter(result => result.day === tomorrowKey);
-
-            if (todayResults.length === 23) {
-              // DST switch to summer time
-              todayResults = this.fnc.fillMissingHours(todayResults, todayKey);
-            }
-
-            if (todayResults.length === 25 || todayResults.length === 24) {
-              await this.pricesCache.set(todayKey, todayResults);
-              pricing.today = todayResults;
-              await this.pricesCache.set(`solarOverrideApplied_${todayKey}`, false);
-              this.platform.log.debug(`OK: pulled Nordpool prices in ${this.platform.config.area} area for TODAY (${todayKey})`);
-              this.platform.log.debug(JSON.stringify(todayResults.map(({ hour, price }) => ({ hour, price }))));
-              await this.fnc.analyze_and_setServices(currentHour);
-            } else {
-              this.platform.log.warn('WARN: Something is incorrect with API response. Unable to determine today\'s Nordpool prices.');
-              this.platform.log.warn(`Raw response: ${JSON.stringify(todayResults)}`);
-            }
-
-            if (tomorrowResults.length === 23) {
-              // DST switch to summer time
-              tomorrowResults = this.fnc.fillMissingHours(tomorrowResults, tomorrowKey);
-            }
-
-            if ( tomorrowResults.length === 24 ) {
-              this.pricesCache.set(tomorrowKey, tomorrowResults);
-
-              // keep decimalPrecision and area cache fresh so it does not ttl/expire
-              this.pricesCache.set('decimalPrecision', this.decimalPrecision);
-              this.pricesCache.set('area', this.platform.config.area);
-
-              this.platform.log.debug(`OK: pulled Nordpool prices in ${this.platform.config.area} area for TOMORROW (${tomorrowKey})`);
-              this.platform.log.debug(JSON.stringify(tomorrowResults.map(({ hour, price }) => ({ hour, price }))));
-
-              if (this.dynamicCheapestConsecutiveHours) {
-                setTimeout(() => {
-                  this.fnc.getCheapestHoursIn2days();
-                }, 2000);
-              }
-
-            }
-          } else {
-            this.platform.log.warn('WARN: API returned no or abnormal results for todays\'s Nordpool prices data. Will retry in 1 hour');
-          }
-        })
-        .catch((error) => {
-          this.platform.log.error(`ERR: Failed to get todays's prices, will retry in 1 hour. ${error}`);
-        });
-    } else {
-      pricing.today = await this.pricesCache.get(todayKey, []);
-      await this.fnc.analyze_and_setServices(currentHour);
+    if (!Array.isArray(cachedToday) || cachedToday.length === 0) {
+      this.platform.log.warn(`[${this.deviceConfig.name}] No price data available in cache yet.`);
+      return;
     }
+
+    const isCurrentlyOn = this.calculateCheapestStatus(cachedToday);
+
+    // HomeKitissa ContactSensor: 0 = DETECTED (On), 1 = NOT_DETECTED (Off)
+    // Jos käytät Switchiä, käytä: this.platform.Characteristic.On, isCurrentlyOn
+    const characteristic = this.platform.Characteristic.ContactSensorState;
+    const value = isCurrentlyOn
+      ? this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
+      : this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED;
+
+    this.service.updateCharacteristic(characteristic, value);
+
+    this.platform.log.info(`[${this.deviceConfig.name}] Status update: ${isCurrentlyOn ? 'ON' : 'OFF'}`);
+  }
+
+  calculateCheapestStatus(prices: any[]): boolean {
+    const currentHour = new Date().getHours();
+    const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
+
+    // 1. Suodatetaan tunnit aikavälin mukaan
+    const windowPrices = prices.filter(p => {
+      if (rangeStart <= rangeEnd) {
+        // Normaali aikaväli (esim. 08-16)
+        return p.hour >= rangeStart && p.hour <= rangeEnd;
+      } else {
+        // Yön yli menevä väli (esim. 23-06)
+        return p.hour >= rangeStart || p.hour <= rangeEnd;
+      }
+    });
+
+    if (windowPrices.length === 0) {
+      return false;
+    }
+
+    // 2. Järjestetään hinnan mukaan (halvin ensin)
+    const sortedWindow = [...windowPrices].sort((a, b) => a.price - b.price);
+
+    // 3. Poimitaan X halvinta tuntia
+    const cheapestHoursArray = sortedWindow
+      .slice(0, Math.min(cheapestHours, windowPrices.length))
+      .map(p => p.hour);
+
+    this.platform.log.debug(`[${this.deviceConfig.name}] Window hours: ${windowPrices.map(p => p.hour).join(',')}`);
+    this.platform.log.debug(`[${this.deviceConfig.name}] Cheapest hours in window: ${cheapestHoursArray.join(',')}`);
+
+    // 4. Tarkistetaan onko nykyinen tunti yksi valituista
+    return cheapestHoursArray.includes(currentHour);
   }
 }

@@ -1,206 +1,190 @@
 {
-    "pluginAlias": "Nordpool",
+    "pluginAlias": "NordpoolBaltics",
     "pluginType": "platform",
-    "singular": true,
     "schema": {
         "type": "object",
         "properties": {
             "name": {
-                "title": "Bridge name",
+                "title": "Bridge Name",
                 "type": "string",
                 "required": true,
-                "placeholder": "Nordpool",
-                "description": "You'll see this name when you add the bridge in your Home app and in Homebridge logs.",
-                "default": "Nordpool"
+                "default": "Nordpool",
+                "description": "Name shown in Homebridge logs and Home app."
             },
             "area": {
                 "title": "Nordpool Market Area",
                 "type": "string",
                 "required": true,
-                "default": "LT",
+                "default": "FI",
                 "oneOf": [
-                    { "title": "Lithuania", "enum": ["LT"] },
-                    { "title": "Latvia", "enum": ["LV"] },
-                    { "title": "Estonia", "enum": ["EE"] },
-                    { "title": "Finland", "enum": ["FI"] },
-                    { "title": "Sweden SE1", "enum": ["SE1"] },
-                    { "title": "Sweden SE2", "enum": ["SE2"] },
-                    { "title": "Sweden SE3", "enum": ["SE3"] },
-                    { "title": "Sweden SE4", "enum": ["SE4"] },
-                    { "title": "Denmark DK1", "enum": ["DK1"] },
-                    { "title": "Denmark DK2", "enum": ["DK2"] },
-                    { "title": "Norway NO1", "enum": ["NO1"] },
-                    { "title": "Norway NO2", "enum": ["NO2"] },
-                    { "title": "Norway NO3", "enum": ["NO3"] },
-                    { "title": "Norway NO4", "enum": ["NO4"] },
-                    { "title": "Norway NO5", "enum": ["NO5"] },
-                    { "title": "Germany", "enum": ["DE"] },
-                    { "title": "Luxembourg", "enum": ["LU"] },
-                    { "title": "Austria", "enum": ["AT"] },
-                    { "title": "Spain", "enum": ["ES"] },
-                    { "title": "Portugal", "enum": ["PT"] }
+                    {
+                        "title": "Finland",
+                        "enum": [
+                            "FI"
+                        ]
+                    },
+                    {
+                        "title": "Lithuania",
+                        "enum": [
+                            "LT"
+                        ]
+                    },
+                    {
+                        "title": "Latvia",
+                        "enum": [
+                            "LV"
+                        ]
+                    },
+                    {
+                        "title": "Estonia",
+                        "enum": [
+                            "EE"
+                        ]
+                    },
+                    {
+                        "title": "Sweden SE1",
+                        "enum": [
+                            "SE1"
+                        ]
+                    },
+                    {
+                        "title": "Sweden SE2",
+                        "enum": [
+                            "SE2"
+                        ]
+                    },
+                    {
+                        "title": "Sweden SE3",
+                        "enum": [
+                            "SE3"
+                        ]
+                    },
+                    {
+                        "title": "Sweden SE4",
+                        "enum": [
+                            "SE4"
+                        ]
+                    },
+                    {
+                        "title": "Norway NO1",
+                        "enum": [
+                            "NO1"
+                        ]
+                    },
+                    {
+                        "title": "Norway NO2",
+                        "enum": [
+                            "NO2"
+                        ]
+                    },
+                    {
+                        "title": "Norway NO3",
+                        "enum": [
+                            "NO3"
+                        ]
+                    },
+                    {
+                        "title": "Norway NO4",
+                        "enum": [
+                            "NO4"
+                        ]
+                    },
+                    {
+                        "title": "Norway NO5",
+                        "enum": [
+                            "NO5"
+                        ]
+                    },
+                    {
+                        "title": "Denmark DK1",
+                        "enum": [
+                            "DK1"
+                        ]
+                    },
+                    {
+                        "title": "Denmark DK2",
+                        "enum": [
+                            "DK2"
+                        ]
+                    },
+                    {
+                        "title": "Germany",
+                        "enum": [
+                            "DE"
+                        ]
+                    },
+                    {
+                        "title": "Austria",
+                        "enum": [
+                            "AT"
+                        ]
+                    }
                 ]
             },
             "decimalPrecision": {
                 "title": "Price Decimal Precision",
-                "description": "This parameter is used for hourly price and median calculations.",
                 "type": "integer",
-                "required": true,
                 "default": 1,
                 "oneOf": [
                     {
-                        "title": "0 Decimal - i.e. 4",
-                        "enum": [0]
+                        "title": "0 Decimals (e.g. 4)",
+                        "enum": [
+                            0
+                        ]
                     },
                     {
-                        "title": "1 Decimal (Default) - i.e. 4.6",
-                        "enum": [1]
+                        "title": "1 Decimal (e.g. 4.6)",
+                        "enum": [
+                            1
+                        ]
                     },
                     {
-                        "title": "2 Decimal - i.e. 4.68",
-                        "enum": [2]
+                        "title": "2 Decimals (e.g. 4.68)",
+                        "enum": [
+                            2
+                        ]
                     }
                 ]
             },
-            "cheapest4Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": true,
-                "title": "Show 'cheapest 4 hours' sensor (Nordpool_cheapest4Hours)"
-            },
-            "cheapest5Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 5 hours' sensor (Nordpool_cheapest5Hours)"
-            },
-            "cheapest6Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 6 hours' sensor (Nordpool_cheapest6Hours)"
-            },
-            "cheapest7Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 7 hours' sensor (Nordpool_cheapest7Hours)"
-            },
-            "cheapest8Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 8 hours' sensor (Nordpool_cheapest8Hours)"
-            },
-            "cheapest9Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 9 hours' sensor (Nordpool_cheapest9Hours)"
-            },
-            "cheapest10Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 10 hours' sensor (Nordpool_cheapest10Hours)"
-            },
-            "cheapest11Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 11 hours' sensor (Nordpool_cheapest11Hours)"
-            },
-            "cheapest12Hours": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 12 hours' sensor (Nordpool_cheapest12Hours)"
-            },
-            "cheapest5HoursConsec": {
-                "required": true,
-                "type": "boolean",
-                "default": false,
-                "title": "Show 'cheapest 5 consecutive hours' sensor (Nordpool_cheapest5HoursConsec)"
-            },
-            "dynamicCheapestConsecutiveHours": {
-                "title": "Dynamic Cheapest 5 Consecutive Hours",
-                "description": "If enabled, at 6PM it will recalculate using day-ahead pricing. For more details go to <a href='https://github.com/msegzda/homebridge-nordpool-baltics/blob/latest/README.md#cheapest-consecutive-hours-calculation-logic' target='_blank'>plugin README</a>.",
-                "required": false,
-                "default": false,
-                "type": "boolean",
-                "condition": {
-                    "functionBody": "return model.cheapest5HoursConsec === true;"
-                }
-            },
-            "currentHour": {
-                "required": false,
-                "type": "boolean",
-                "default": false,
-                "title": "DEPRECATED: Show 'current hour' sensor (Nordpool_currentHour)"
-            },
-            "excessivePriceMargin": {
-                "title": "Excessive Price Margin Above Median",
-                "description": "Percentage value used as margin to calculate highest price(s) of the day. Default 200 (percent).",
-                "required": false,
-                "default": 200,
-                "type": "integer",
-                "minimum": 50,
-                "maximum": 400
-            },
-            "minPriciestMargin": {
-                "title": "Minimum Price Threshold for Priciest Hour(s)",
-                "description": "Hours below this price will not be included into 'priciest hours(s)' calculation. Default 0 (cents).",
-                "required": false,
-                "default": 0,
-                "minimum": 0,
-                "maximum": 500,
-                "type": "number"
-            },
-            "plotTheChart": {
-                "title": "Plot Electricity Price Chart",
-                "description": "If enabled, current day Nordpool prices chart will show up in log at midnight or upon (re)start of the plugin.",
-                "required": false,
-                "default": false,
-                "type": "boolean"
-            },
-            "solarOverride": {
-                "title": "Solar Plant Nordpool Override",
-                "description": "If you own solar power plant, set best hours it covers ALL your household needs in JUNE. For more details go to <a href='https://github.com/msegzda/homebridge-nordpool-baltics/blob/latest/README.md#if-you-own-solar-power-plant' target='_blank'>plugin README</a>. Nordpool price will override to 0 during best solar power generation hours.",
-                "type": "boolean",
-                "required": true,
-                "default": false
-            },
-            "solarOverrideJuneHourStart": {
-                "title": "Start hour of best solar yield in June:",
-                "required": false,
-                "default": 7,
-                "minimum": 0,
-                "maximum": 12,
-                "type": "number",
-                "condition": {
-                    "functionBody": "return model.solarOverride === true;"
-                }
-            },
-            "solarOverrideJuneHourEnd": {
-                "title": "Last hour (inclusive) of best solar yield in June:",
-                "required": false,
-                "default": 18,
-                "minimum": 13,
-                "maximum": 23,
-                "type": "number",
-                "condition": {
-                    "functionBody": "return model.solarOverride === true;"
-                }
-            },
-            "latitude": {
-                "title": "Latitude (<a href='https://www.latlong.net/' target='_blank'>locator here</a>) of your solar plant location:",
-                "required": false,
-                "default": 55,
-                "minimum": 50,
-                "maximum": 71,
-                "type": "number",
-                "condition": {
-                    "functionBody": "return model.solarOverride === true;"
+            "devices": {
+                "title": "Dynamic Price Sensors (Devices)",
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "title": "Sensor Settings",
+                    "properties": {
+                        "name": {
+                            "title": "Sensor Name",
+                            "type": "string",
+                            "required": true,
+                            "placeholder": "e.g. Water Heater",
+                            "description": "Unique name for this sensor."
+                        },
+                        "cheapestHours": {
+                            "title": "Number of Cheapest Hours",
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 24,
+                            "default": 3,
+                            "description": "Pick the X cheapest hours within the time range."
+                        },
+                        "rangeStart": {
+                            "title": "Search Range Start (0-23)",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 23,
+                            "default": 0,
+                            "description": "The hour to start looking for cheap electricity."
+                        },
+                        "rangeEnd": {
+                            "title": "Search Range End (0-23)",
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 23,
+                            "default": 23,
+                            "description": "The hour to stop looking for cheap electricity."
+                        }
+                    }
                 }
             }
         }
