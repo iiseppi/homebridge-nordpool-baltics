@@ -1,50 +1,30 @@
 {
-    "displayName": "Homebridge Nordpool Baltics",
-    "name": "homebridge-nordpool-baltics",
-    "version": "2.2.2",
+    "displayName": "Nordpool Cheapest Range",
+    "name": "homebridge-nordpool-cheapest-range",
+    "version": "1.0.0",
     "private": false,
-    "description": "Plugin exposes virtual accessories (switch, light, presence, temperature) and enables HomeKit automation by Nordpool electricity price in Lithuania, Latvia, Estonia, Finland, Sweden, Norway, Denmark, Germany, Luxembourg, Austria, Spain, Portugal.",
-    "homepage": "https://github.com/msegzda/homebridge-nordpool-baltics",
+    "description": "Homebridge plugin to create virtual sensors for the cheapest electricity hours within custom time windows using Nordpool data.",
+    "homepage": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range",
     "author": {
-        "name": "Mantas Segzda",
-        "email": "msegzda+nordpool@gmail.com"
+        "name": "iiseppi"
     },
-    "funding": [
-        {
-            "type": "paypal",
-            "url": "https://www.paypal.me/msegzda"
-        }
-    ],
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+ssh://git@github.com/msegzda/homebridge-nordpool-baltics.git"
+        "url": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range.git"
     },
     "bugs": {
-        "url": "https://github.com/msegzda/homebridge-nordpool-baltics/issues"
+        "url": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range/issues"
     },
     "keywords": [
         "homebridge-plugin",
         "nordpool",
-        "lithuania",
-        "latvia",
-        "estonia",
-        "finland",
-        "sweden",
-        "denmark",
-        "norway",
-        "germany",
-        "luxembourg",
-        "austria",
-        "spain",
-        "portugal",
         "electricity",
-        "spot",
-        "price",
-        "spot price",
-        "day-ahead",
-        "homekit",
-        "electricity market"
+        "spot-price",
+        "smart-home",
+        "energy-saving",
+        "cheapest-hours",
+        "custom-range"
     ],
     "homebridge": {
         "pluginType": "platform",
@@ -59,11 +39,10 @@
         "lint:md": "markdownlint '*.md'",
         "lint": "eslint src/**.ts --no-warn-ignored --max-warnings=10",
         "watch": "npm run build && npm link && nodemon",
-        "test": "jest --passWithNoTests && eslint src/**.ts --no-warn-ignored --max-warnings=10 && printf '\\033[42m\\033[30m PASS \\033[0m  ESLint\\n' && markdownlint '*.md' && printf '\\033[42m\\033[30m PASS \\033[0m  Markdown lint\\n' && node scripts/validate-json.mjs && printf '\\033[42m\\033[30m PASS \\033[0m  JSON files\\n'",
+        "test": "jest --passWithNoTests && eslint src/**.ts --no-warn-ignored --max-warnings=10",
         "build": "rimraf ./dist && tsc",
         "prepublishOnly": "npm run lint && npm run build",
-        "deploylocal": "npm run build && npm link && sudo hb-service restart",
-        "postpublish": "node ./scripts/deprecate-old-versions.mjs"
+        "deploylocal": "npm run build && npm link && sudo hb-service restart"
     },
     "jest": {
         "preset": "ts-jest",
