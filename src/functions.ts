@@ -26,11 +26,11 @@ export class Functions {
   ) { }
 
   /**
-   * Hakee Nordpool-tiedot eri tarjoajilta alueen perusteella
+   * Fetches Nordpool data from different providers based on the region
    */
   async pullNordpoolData(): Promise<NordpoolData[] | null> {
     try {
-      let rawData;
+      let rawData: any[] | null = null;
       const area = this.platform.config.area || 'FI';
 
       if (area.match(/^(LT|LV|EE|FI)$/)) {
@@ -45,7 +45,7 @@ export class Functions {
         rawData = await omie_getNordpoolData(this.platform.log, this.platform.config);
       }
 
-      // Varajärjestelmä tai muut maat
+      // Fallback or other countries
       if (!rawData) {
         rawData = await spothinta_getNordpoolData(this.platform.log, this.platform.config);
       }
@@ -55,7 +55,13 @@ export class Functions {
         return null;
       }
 
-      const hourlyData = this.convertToHourlyAverages(rawData);
+      // Ensure 'day' property is a number (day of month) to match our interface
+      const sanitizedData: NordpoolData[] = rawData.map(item => ({
+        ...item,
+        day: typeof item.day === 'string' ? parseInt(item.day.split('-').pop() || '0') : item.day
+      }));
+
+      const hourlyData = this.convertToHourlyAverages(sanitizedData);
 
       if (this.plotTheChart) {
         this.plotPricesChart(hourlyData);
@@ -69,7 +75,7 @@ export class Functions {
   }
 
   /**
-   * Laskee aurinkopaneelien vaikutuksen (hinta 0 tietyillä tunneilla)
+   * Applies solar panels impact (price 0 during specific hours)
    */
   async applySolarOverride(data: NordpoolData[]): Promise<NordpoolData[]> {
     const config = this.platform.config;
@@ -79,7 +85,7 @@ export class Functions {
 
     const today = DateTime.local().setZone(defaultAreaTimezone(config));
     if (today.month < 3 || today.month > 9) {
-      return data; // Voimassa vain maalis-syyskuussa
+      return data; // Valid only from March to September
     }
 
     const start = config.solarOverrideJuneHourStart ?? 10;
@@ -96,7 +102,7 @@ export class Functions {
   }
 
   /**
-   * Piirtää hintoista ASCII-kaavion lokiin
+   * Plots price chart in ASCII format to logs
    */
   plotPricesChart(data: NordpoolData[]) {
     try {
@@ -113,12 +119,15 @@ export class Functions {
   }
 
   /**
-   * Korjaa puuttuvat tunnit (esim. kesäaikaan siirtyminen)
+   * Fixes missing hours (e.g., daylight saving time transitions)
    */
   fillMissingHours(data: NordpoolData[], dayKey: string): NordpoolData[] {
     if (data.length >= 24) {
       return data;
     }
+
+    // Convert dayKey (string) to day (number)
+    const dayNumber = parseInt(dayKey.split('-').pop() || '0');
 
     const filledData = [...data].sort((a, b) => a.hour - b.hour);
     for (let i = 0; i < filledData.length - 1; i++) {
@@ -127,7 +136,7 @@ export class Functions {
         filledData.push({
           ...filledData[i],
           hour: missingHour,
-          day: dayKey,
+          day: dayNumber,
         });
         filledData.sort((a, b) => a.hour - b.hour);
         break;
@@ -137,10 +146,10 @@ export class Functions {
   }
 
   /**
-   * Muuntaa usean pisteen datan tuntikeskiarvoiksi
+   * Converts multi-point data to hourly averages
    */
   private convertToHourlyAverages(data: NordpoolData[]): NordpoolData[] {
-    const hourlyDataMap = new Map<string, { total: number; count: number; hour: number; day: string }>();
+    const hourlyDataMap = new Map<string, { total: number; count: number; hour: number; day: number }>();
 
     data.forEach(item => {
       const key = `${item.day}-${item.hour}`;

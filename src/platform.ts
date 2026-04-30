@@ -20,14 +20,14 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
     this.api.on('didFinishLaunching', async () => {
       this.log.debug('Executed didFinishLaunching callback');
 
-      // 1. Haetaan hinnat heti käynnistyksessä
+      // 1. Fetch prices immediately upon startup
       await this.updatePrices();
 
-      // 2. Alustetaan laitteet
+      // 2. Initialize devices
       this.discoverDevices();
 
-      // 3. Asetetaan automaattinen päivitys joka tunti (esim. minuutilla 1)
-      // Tämä varmistaa, että uudet huomisen hinnat haetaan klo 14-15 jälkeen
+      // 3. Set up automatic update every hour (e.g., at minute 1)
+      // This ensures new tomorrow prices are fetched after 14:00-15:00 release
       schedule('1 * * * *', async () => {
         await this.updatePrices();
       });
@@ -35,7 +35,7 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
   }
 
   /**
-   * Keskitetty funktio hintojen hakuun ja tallentamiseen välimuistiin
+   * Centralized function to fetch prices and store them in cache
    */
   async updatePrices() {
     this.log.info('Refreshing Nordpool prices...');
@@ -47,17 +47,22 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
         return;
       }
 
-      // Käsitellään aurinkopaneeli-ylitykset
+      // Handle solar panel price overrides
       const processedData = await this.fnc.applySolarOverride(rawData);
 
-      // Erotellaan tämän päivän ja huomisen tiedot
+      // Get date keys as strings (e.g., "2026-04-30")
       const todayKey = fnc_todayKey(this.config);
       const tomorrowKey = fnc_tomorrowKey(this.config);
 
-      const todayPrices = processedData.filter(p => p.day === todayKey);
-      const tomorrowPrices = processedData.filter(p => p.day === tomorrowKey);
+      // Extract numeric day of month from the keys to match NordpoolData.day (number)
+      const todayDayNum = parseInt(todayKey.split('-').pop() || '0');
+      const tomorrowDayNum = parseInt(tomorrowKey.split('-').pop() || '0');
 
-      // Tarkistetaan ja korjataan puuttuvat tunnit (esim. kesäaika)
+      // Filter data for today and tomorrow using the day numbers
+      const todayPrices = processedData.filter(p => p.day === todayDayNum);
+      const tomorrowPrices = processedData.filter(p => p.day === tomorrowDayNum);
+
+      // Check and fix missing hours (e.g., daylight saving time transitions)
       const finalToday = this.fnc.fillMissingHours(todayPrices, todayKey);
 
       if (finalToday.length > 0) {
@@ -108,7 +113,7 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
       processedUUIDs.push(uuid);
     }
 
-    // Poistetaan vanhentuneet
+    // Remove obsolete accessories
     for (const [uuid, accessory] of this.accessories) {
       if (!processedUUIDs.includes(uuid)) {
         this.log.info('Removing accessory:', accessory.displayName);
