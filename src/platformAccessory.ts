@@ -30,7 +30,7 @@ export class NordpoolPlatformAccessory {
 
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.deviceConfig.name);
 
-    // KORJAUS: Fakegatossa Contact Sensorille pitää käyttää tyyppiä 'door'
+    // Fakegatossa Contact Sensorille pitää käyttää tyyppiä 'door'
     const FakeGatoHistory = FakeGatoHistoryService(this.api);
     this.historyService = new FakeGatoHistory('door', this.accessory, {
       log: this.platform.log,
@@ -70,7 +70,7 @@ export class NordpoolPlatformAccessory {
 
     this.service.updateCharacteristic(characteristic, value);
 
-    // KORJAUS: 'door' tyyppi odottaa avainta 'status' (1 = auki/halpa, 0 = kiinni/kallis)
+    // 'door' tyyppi odottaa avainta 'status' (1 = auki/halpa, 0 = kiinni/kallis)
     this.historyService.addEntry({
       time: Math.round(new Date().getTime() / 1000),
       status: isCurrentlyOn ? 1 : 0,
@@ -103,6 +103,13 @@ export class NordpoolPlatformAccessory {
 
     const sortedWindow = [...targetHours].sort((a, b) => a.price - b.price);
     const cheapestHoursArray = sortedWindow.slice(0, Math.min(cheapestHours, targetHours.length));
+
+    // LOKITUS: Erotellaan halvat (ON) ja kalliit (OFF) tunnit ja lajitellaan ne aikajärjestykseen
+    const onHours = cheapestHoursArray.map(p => p.hour).sort((a, b) => a - b);
+    const offHours = targetHours.filter(p => !cheapestHoursArray.includes(p)).map(p => p.hour).sort((a, b) => a - b);
+
+    // Tulostetaan selkeä yhteenveto lokiin
+    this.platform.log.info(`[${this.deviceConfig.name}] Schedule (${rangeStart}:00-${rangeEnd}:00) -> ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`);
 
     return cheapestHoursArray.some(p => p.hour === currentHour && p.day === currentDay);
   }
