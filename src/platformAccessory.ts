@@ -24,13 +24,13 @@ export class NordpoolPlatformAccessory {
       .setCharacteristic(this.platform.Characteristic.Model, 'Dynamic Price Sensor')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.accessory.UUID);
 
-    // Käytetään HomeKitissä Contact Sensor -tyyppiä
+    // Use Contact Sensor type in HomeKit
     this.service = this.accessory.getService(this.platform.Service.ContactSensor) ||
       this.accessory.addService(this.platform.Service.ContactSensor);
 
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.deviceConfig.name);
 
-    // Fakegatossa Contact Sensorille pitää käyttää tyyppiä 'door'
+    // Fakegato requires the 'door' type for Contact Sensors
     const FakeGatoHistory = FakeGatoHistoryService(this.api);
     this.historyService = new FakeGatoHistory('door', this.accessory, {
       log: this.platform.log,
@@ -62,7 +62,7 @@ export class NordpoolPlatformAccessory {
 
     const isCurrentlyOn = this.calculateCheapestStatus(allPrices);
 
-    // Päivitä HomeKitin tila
+    // Update HomeKit status
     const characteristic = this.platform.Characteristic.ContactSensorState;
     const value = isCurrentlyOn
       ? this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
@@ -70,7 +70,7 @@ export class NordpoolPlatformAccessory {
 
     this.service.updateCharacteristic(characteristic, value);
 
-    // 'door' tyyppi odottaa avainta 'status' (1 = auki/halpa, 0 = kiinni/kallis)
+    // The 'door' type expects the 'status' key (1 = open/cheap, 0 = closed/expensive)
     this.historyService.addEntry({
       time: Math.round(new Date().getTime() / 1000),
       status: isCurrentlyOn ? 1 : 0,
@@ -104,11 +104,17 @@ export class NordpoolPlatformAccessory {
     const sortedWindow = [...targetHours].sort((a, b) => a.price - b.price);
     const cheapestHoursArray = sortedWindow.slice(0, Math.min(cheapestHours, targetHours.length));
 
-    // LOKITUS: Erotellaan halvat (ON) ja kalliit (OFF) tunnit ja lajitellaan ne aikajärjestykseen
-    const onHours = cheapestHoursArray.map(p => p.hour).sort((a, b) => a - b);
-    const offHours = targetHours.filter(p => !cheapestHoursArray.includes(p)).map(p => p.hour).sort((a, b) => a - b);
+    // LOGGING: Format hours with their exact prices for full transparency
+    const onHours = cheapestHoursArray
+      .sort((a, b) => a.hour - b.hour)
+      .map(p => `${p.hour}:00 (${p.price})`);
 
-    // Tulostetaan selkeä yhteenveto lokiin
+    const offHours = targetHours
+      .filter(p => !cheapestHoursArray.includes(p))
+      .sort((a, b) => a.hour - b.hour)
+      .map(p => `${p.hour}:00 (${p.price})`);
+
+    // Print a clear summary to the log including prices
     this.platform.log.info(`[${this.deviceConfig.name}] Schedule (${rangeStart}:00-${rangeEnd}:00) -> ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`);
 
     return cheapestHoursArray.some(p => p.hour === currentHour && p.day === currentDay);
