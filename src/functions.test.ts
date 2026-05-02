@@ -32,7 +32,7 @@ function makeFunctions(): Functions {
 }
 
 /** Builds a complete 24-hour NordpoolData array (prices 1-24 c/kWh). */
-function makeFullDay(day: string): NordpoolData[] {
+function makeFullDay(day: number): NordpoolData[] {
   return Array.from({ length: 24 }, (_, h) => ({ day, hour: h, price: h + 1 }));
 }
 
@@ -42,7 +42,7 @@ function makeFullDay(day: string): NordpoolData[] {
  *
  * Typical values: CET → 2, EET → 3, WET (Portugal) → 1
  */
-function makeDstDay(day: string, missingHour: number): NordpoolData[] {
+function makeDstDay(day: number, missingHour: number): NordpoolData[] {
   return makeFullDay(day).filter(e => e.hour !== missingHour);
 }
 
@@ -54,24 +54,26 @@ describe('Functions – fillMissingHours', () => {
 
   it('returns a 24-hour array unchanged (no DST transition)', () => {
     const fnc = makeFunctions();
-    const data = makeFullDay('2026-03-28');
+    const data = makeFullDay(28); // 2026-03-28
     const result = fnc.fillMissingHours(data, '2026-03-28');
     expect(result).toHaveLength(24);
     expect(result.map(e => e.hour).sort((a, b) => a - b))
       .toEqual(Array.from({ length: 24 }, (_, i) => i));
   });
 
-  it('returns a 25-hour array unchanged (DST fall-back — clock goes back, no padding needed)', () => {
+  it('returns a 24-hour array (DST fall-back — 25 hour input truncated)', () => {
     const fnc = makeFunctions();
     // 25th entry simulates the repeated hour when clocks fall back
-    const data = [...makeFullDay('2026-10-25'), { day: '2026-10-25', hour: 2, price: 99 }];
-    expect(fnc.fillMissingHours(data, '2026-10-25')).toHaveLength(25);
+    const data: NordpoolData[] = [...makeFullDay(25), { day: 25, hour: 24, price: 99 }];
+    // fillMissingHours now truncates 25-hour days down to 24
+    const result = fnc.fillMissingHours(data, '2026-10-25');
+    expect(result).toHaveLength(24);
   });
 
   it('fills missing hour 2 – CET spring-forward (AT/DE/LU/ES/SE/DK/NO, clocks jump 02:00→03:00)', () => {
     const fnc = makeFunctions();
     // Hours present: 0, 1, 3, 4 … 23 — hour 2 (02:00–03:00 CET) is absent
-    const data = makeDstDay('2026-03-29', 2);
+    const data = makeDstDay(29, 2); // 2026-03-29
     expect(data).toHaveLength(23);
 
     const result = fnc.fillMissingHours(data, '2026-03-29');
@@ -84,13 +86,13 @@ describe('Functions – fillMissingHours', () => {
     const h1 = result.find(e => e.hour === 1)!;
     const h2 = result.find(e => e.hour === 2)!;
     expect(h2.price).toBe(h1.price);
-    expect(h2.day).toBe('2026-03-29');
+    expect(h2.day).toBe(29);
   });
 
   it('fills missing hour 3 – EET spring-forward (EE/LT/LV/FI, clocks jump 03:00→04:00)', () => {
     const fnc = makeFunctions();
     // Hours present: 0, 1, 2, 4, 5 … 23 — hour 3 (03:00–04:00 EET) is absent
-    const data = makeDstDay('2026-03-29', 3);
+    const data = makeDstDay(29, 3); // 2026-03-29
     expect(data).toHaveLength(23);
 
     const result = fnc.fillMissingHours(data, '2026-03-29');
@@ -103,13 +105,13 @@ describe('Functions – fillMissingHours', () => {
     const h2 = result.find(e => e.hour === 2)!;
     const h3 = result.find(e => e.hour === 3)!;
     expect(h3.price).toBe(h2.price);
-    expect(h3.day).toBe('2026-03-29');
+    expect(h3.day).toBe(29);
   });
 
   it('fills missing hour 1 – WET spring-forward (PT/Lisbon, clocks jump 01:00→02:00)', () => {
     const fnc = makeFunctions();
     // Hours present: 0, 2, 3 … 23 — hour 1 (01:00–02:00 WET) is absent
-    const data = makeDstDay('2026-03-29', 1);
+    const data = makeDstDay(29, 1); // 2026-03-29
     expect(data).toHaveLength(23);
 
     const result = fnc.fillMissingHours(data, '2026-03-29');
@@ -122,15 +124,17 @@ describe('Functions – fillMissingHours', () => {
     const h0 = result.find(e => e.hour === 0)!;
     const h1 = result.find(e => e.hour === 1)!;
     expect(h1.price).toBe(h0.price);
-    expect(h1.day).toBe('2026-03-29');
+    expect(h1.day).toBe(29);
   });
 
-  it('emits a warning log that includes the added hour number', () => {
+  it('emits a debug log that mentions DST handling', () => {
     const fnc = makeFunctions();
-    fnc.fillMissingHours(makeDstDay('2026-03-29', 3), '2026-03-29');
+    fnc.fillMissingHours(makeDstDay(29, 3), '2026-03-29');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const logWarn: jest.Mock = (fnc as any).platform.log.warn;
-    expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('3'));
+    const logDebug: jest.Mock = (fnc as any).platform.log.debug;
+    
+    // In our new functions.ts we changed the log to debug and modified the message
+    expect(logDebug).toHaveBeenCalledWith(expect.stringContaining('[DST]'));
   });
 
 });
