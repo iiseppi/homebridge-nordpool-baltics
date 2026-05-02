@@ -11,6 +11,9 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
   public readonly accessories: Map<string, PlatformAccessory> = new Map();
   private readonly pricesCache = defaultPricesCache(this.api, this.log as Logging);
   private readonly fnc = new Functions(this, this.api);
+  
+  // Store references to our accessory instances to trigger updates manually
+  private readonly activeAccessories: NordpoolPlatformAccessory[] = [];
 
   constructor(
     public readonly log: Logger,
@@ -25,17 +28,25 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
 
       // 2. Initialize devices
       this.discoverDevices();
+      
+      // 3. Force initial state update for all discovered devices
+      // This ensures HomeKit gets the correct state (with a pulse) immediately after boot.
+      for (const accessory of this.activeAccessories) {
+         accessory.updateStatus();
+      }
 
-      // 3. Set up automatic update every hour (e.g., at minute 1)
-      // This ensures new tomorrow prices are fetched after 14:00-15:00 release
-      schedule('1 * * * *', async () => {
+      // 4. Set up automatic price fetching from the API
+      // We run this at 2 minutes past the hour (e.g., 14:02) to avoid hitting the API
+      // exactly on the hour when servers are busiest. The state update (pulsing) 
+      // happens separately inside the accessory classes precisely on the hour.
+      schedule('2 * * * *', async () => {
         await this.updatePrices();
       });
     });
   }
 
   /**
-   * Centralized function to fetch prices and store them in cache
+   * Centralized function to fetch prices from the API and store them in the local cache
    */
   async updatePrices() {
     this.log.info('Refreshing Nordpool prices...');
@@ -102,18 +113,20 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
         this.log.info('Restoring existing accessory:', device.name);
         existingAccessory.context.device = device;
         this.api.updatePlatformAccessories([existingAccessory]);
-        new NordpoolPlatformAccessory(this, existingAccessory, this.api);
+        const accInstance = new NordpoolPlatformAccessory(this, existingAccessory, this.api);
+        this.activeAccessories.push(accInstance);
       } else {
         this.log.info('Adding new accessory:', device.name);
         const accessory = new this.api.platformAccessory(device.name, uuid);
         accessory.context.device = device;
-        new NordpoolPlatformAccessory(this, accessory, this.api);
+        const accInstance = new NordpoolPlatformAccessory(this, accessory, this.api);
+        this.activeAccessories.push(accInstance);
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
       processedUUIDs.push(uuid);
     }
 
-    // Remove obsolete accessories
+    // Remove obsolete accessories that are no longer in the configuration
     for (const [uuid, accessory] of this.accessories) {
       if (!processedUUIDs.includes(uuid)) {
         this.log.info('Removing accessory:', accessory.displayName);
