@@ -1,95 +1,95 @@
 {
-    "displayName": "Nordpool Cheapest Range",
-    "name": "homebridge-nordpool-cheapest-range",
-    "version": "1.0.0",
-    "private": false,
-    "description": "Homebridge plugin to create virtual sensors for the cheapest electricity hours within custom time windows using Nordpool data.",
-    "homepage": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range",
-    "author": {
-        "name": "iiseppi"
-    },
-    "license": "MIT",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range.git"
-    },
-    "bugs": {
-        "url": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range/issues"
-    },
-    "keywords": [
-        "homebridge-plugin",
-        "nordpool",
-        "electricity",
-        "spot-price",
-        "smart-home",
-        "energy-saving",
-        "cheapest-hours",
-        "custom-range"
+  "displayName": "Nordpool Cheapest Range",
+  "name": "homebridge-nordpool-cheapest-range",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Homebridge plugin to create virtual sensors for the cheapest electricity hours within custom time windows using Nordpool data.",
+  "homepage": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range",
+  "author": {
+    "name": "iiseppi"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range.git"
+  },
+  "bugs": {
+    "url": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range/issues"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "nordpool",
+    "electricity",
+    "spot-price",
+    "smart-home",
+    "energy-saving",
+    "cheapest-hours",
+    "custom-range"
+  ],
+  "homebridge": {
+    "pluginType": "platform",
+    "requiredChildBridge": false
+  },
+  "engines": {
+    "node": "^18.17.0 || ^20.9.0 || ^22.11.0 || ^24.0.0",
+    "homebridge": "^1.6.0 || ^2.0.0-beta.20"
+  },
+  "files": [
+    "dist",
+    "config.schema.json"
+  ],
+  "main": "dist/index.js",
+  "scripts": {
+    "lint:md": "markdownlint '*.md'",
+    "lint": "eslint src/**.ts --no-warn-ignored --max-warnings=10",
+    "watch": "npm run build && npm link && nodemon",
+    "test": "jest --passWithNoTests && eslint src/**.ts --no-warn-ignored --max-warnings=10",
+    "build": "rimraf ./dist && tsc",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run lint && npm run build",
+    "deploylocal": "npm run build && npm link && sudo hb-service restart"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "verbose": true,
+    "passWithNoTests": true,
+    "setupFiles": [
+      "<rootDir>/src/jest.setup.ts"
     ],
-    "homebridge": {
-        "pluginType": "platform",
-        "requiredChildBridge": false
-    },
-    "engines": {
-        "node": "^18.17.0 || ^20.9.0 || ^22.11.0 || ^24.0.0",
-        "homebridge": "^1.6.0 || ^2.0.0-beta.20"
-    },
-    "files": [
-        "dist",
-        "config.schema.json"
-    ],
-    "main": "dist/index.js",
-    "scripts": {
-        "lint:md": "markdownlint '*.md'",
-        "lint": "eslint src/**.ts --no-warn-ignored --max-warnings=10",
-        "watch": "npm run build && npm link && nodemon",
-        "test": "jest --passWithNoTests && eslint src/**.ts --no-warn-ignored --max-warnings=10",
-        "build": "rimraf ./dist && tsc",
-        "prepare": "npm run build",
-        "prepublishOnly": "npm run lint && npm run build",
-        "deploylocal": "npm run build && npm link && sudo hb-service restart"
-    },
-    "jest": {
-        "preset": "ts-jest",
-        "testEnvironment": "node",
-        "verbose": true,
-        "passWithNoTests": true,
-        "setupFiles": [
-            "<rootDir>/src/jest.setup.ts"
-        ],
-        "testPathIgnorePatterns": [
-            "/node_modules/",
-            "/dist/"
-        ]
-    },
-    "devDependencies": {
-        "@types/jest": "^29.5.12",
-        "@types/luxon": "^3.4.2",
-        "@types/node": "^18.19.18",
-        "@types/node-cron": "^3.0.11",
-        "@typescript-eslint/eslint-plugin": "^8.54.0",
-        "@typescript-eslint/parser": "^8.54.0",
-        "eslint": "^9.39.2",
-        "homebridge": "^1.11.1",
-        "jest": "^29.7.0",
-        "lodash": "^4.17.21",
-        "markdownlint": "^0.33.0",
-        "markdownlint-cli": "0.46.0",
-        "nodemon": "^3.0.3",
-        "rimraf": "^3.0.2",
-        "semver": "^7.6.0",
-        "ts-jest": "^29.1.2",
-        "ts-node": "^10.9.1",
-        "typescript": "^5.3.3"
-    },
-    "dependencies": {
-        "@types/ramda": "^0.29.10",
-        "asciichart": "^1.5.25",
-        "axios": "^1.6.7",
-        "fakegato-history": "^0.6.0",
-        "file-system-cache": "^2.4.4",
-        "luxon": "^3.4.4",
-        "node-cron": "^3.0.3",
-        "ramda": "^0.29.1"
-    }
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/dist/"
+    ]
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/luxon": "^3.4.2",
+    "@types/node": "^18.19.18",
+    "@types/node-cron": "^3.0.11",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
+    "homebridge": "^1.11.1",
+    "jest": "^29.7.0",
+    "lodash": "^4.17.21",
+    "markdownlint": "^0.33.0",
+    "markdownlint-cli": "0.46.0",
+    "nodemon": "^3.0.3",
+    "rimraf": "^3.0.2",
+    "semver": "^7.6.0",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@types/ramda": "^0.29.10",
+    "asciichart": "^1.5.25",
+    "axios": "^1.6.7",
+    "fakegato-history": "^0.6.0",
+    "file-system-cache": "^2.4.4",
+    "luxon": "^3.4.4",
+    "node-cron": "^3.0.3",
+    "ramda": "^0.29.1"
+  }
 }
