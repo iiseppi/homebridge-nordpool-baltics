@@ -4,6 +4,7 @@ import { fnc_todayKey, fnc_tomorrowKey, defaultPricesCache } from './settings';
 import { schedule } from 'node-cron';
 
 // Load Fakegato-history for Eve app support
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const FakeGatoHistoryService = require('fakegato-history');
 
 export class NordpoolPlatformAccessory {
@@ -39,11 +40,17 @@ export class NordpoolPlatformAccessory {
       filename: `history_${this.accessory.UUID}.json`,
     });
 
+    // Run immediately on boot
     this.updateStatus();
 
+    // Cron expression: runs exactly at the start of every hour (XX:00:00)
     schedule('0 * * * *', () => {
-      this.platform.log.info(`[${this.deviceConfig.name}] Hourly update triggered.`);
-      this.updateStatus();
+      // Add a 7-second delay (7000 milliseconds) to allow prices to update
+      // and HomeKit to catch up with the new hour safely.
+      setTimeout(() => {
+        this.platform.log.info(`[${this.deviceConfig.name}] Hourly update triggered (with 7s offset).`);
+        this.updateStatus();
+      }, 7000);
     });
   }
 
@@ -62,21 +69,54 @@ export class NordpoolPlatformAccessory {
 
     const isCurrentlyOn = this.calculateCheapestStatus(allPrices);
 
-    // Update HomeKit status
-    const characteristic = this.platform.Characteristic.ContactSensorState;
-    const value = isCurrentlyOn
-      ? this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
-      : this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED;
+    // ---------------------------------------------------------
+    // DOUBLE PULSE STRATEGY FOR HOMEKIT AUTOMATIONS
+    // ---------------------------------------------------------
+    // To ensure HomeKit automations trigger reliably even if they 
+    // are created during an already active long period (e.g. 6 hours cheap), 
+    // we pulse the state briefly to the opposite value, then set the true value.
+    
+    if (isCurrentlyOn) {
+      // Electricity is CHEAP.
+      // Pulse strategy: Force to OFF (0), then back to ON (1) after 1 second.
+      
+      this.service.updateCharacteristic(
+        this.platform.Characteristic.ContactSensorState,
+        this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED // 0 = Closed/No Motion
+      );
 
-    this.service.updateCharacteristic(characteristic, value);
+      setTimeout(() => {
+        this.service.updateCharacteristic(
+          this.platform.Characteristic.ContactSensorState,
+          this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED // 1 = Open/Motion
+        );
+      }, 1000); // 1-second delay
+      
+    } else {
+      // Electricity is EXPENSIVE.
+      // Pulse strategy: Force to ON (1), then back to OFF (0) after 1 second.
+      
+      this.service.updateCharacteristic(
+        this.platform.Characteristic.ContactSensorState,
+        this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED // 1 = Open/Motion
+      );
 
+      setTimeout(() => {
+        this.service.updateCharacteristic(
+          this.platform.Characteristic.ContactSensorState,
+          this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED // 0 = Closed/No Motion
+        );
+      }, 1000); // 1-second delay
+    }
+
+    // Record the TRUE state to Fakegato History
     // The 'door' type expects the 'status' key (1 = open/cheap, 0 = closed/expensive)
     this.historyService.addEntry({
       time: Math.round(new Date().getTime() / 1000),
       status: isCurrentlyOn ? 1 : 0,
     });
 
-    this.platform.log.info(`[${this.deviceConfig.name}] Status update: ${isCurrentlyOn ? 'ON (Cheap)' : 'OFF (Expensive)'}`);
+    this.platform.log.info(`[${this.deviceConfig.name}] Status update: ${isCurrentlyOn ? 'ON (Cheap)' : 'OFF (Expensive)'} (Pulsed to ensure automation trigger)`);
   }
 
   calculateCheapestStatus(allPrices: any[]): boolean {
@@ -85,6 +125,7 @@ export class NordpoolPlatformAccessory {
     const currentDay = now.getDate();
     const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let targetHours: any[] = [];
 
     if (rangeStart <= rangeEnd) {
