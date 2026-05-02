@@ -119,30 +119,55 @@ export class Functions {
   }
 
   /**
-   * Fixes missing hours (e.g., daylight saving time transitions)
+   * Fixes missing or extra hours (e.g., Daylight Saving Time transitions)
+   * Ensures the returned array always has exactly 24 items with hours 0-23.
    */
   fillMissingHours(data: NordpoolData[], dayKey: string): NordpoolData[] {
-    if (data.length >= 24) {
+    // If the data is already perfectly 24 hours, return it as-is
+    if (data.length === 24) {
       return data;
     }
 
     // Convert dayKey (string) to day (number)
     const dayNumber = parseInt(dayKey.split('-').pop() || '0');
+    const fixedData = [...data].sort((a, b) => a.hour - b.hour);
 
-    const filledData = [...data].sort((a, b) => a.hour - b.hour);
-    for (let i = 0; i < filledData.length - 1; i++) {
-      if (filledData[i + 1].hour !== filledData[i].hour + 1) {
-        const missingHour = filledData[i].hour + 1;
-        filledData.push({
-          ...filledData[i],
-          hour: missingHour,
-          day: dayNumber,
-        });
-        filledData.sort((a, b) => a.hour - b.hour);
-        break;
+    // SPRING: DST spring-forward (23 hours)
+    if (fixedData.length === 23) {
+      this.platform.log.debug(`[DST] 23-hour day detected for ${dayKey}. Padding to 24 hours.`);
+      
+      let gapFound = false;
+      for (let i = 0; i < fixedData.length - 1; i++) {
+        // Look for the missing hour gap (e.g., jumps from 2 to 4)
+        if (fixedData[i + 1].hour !== fixedData[i].hour + 1) {
+          const missingHour = fixedData[i].hour + 1;
+          
+          // Duplicate the current hour's price to fill the gap
+          fixedData.splice(i + 1, 0, {
+            ...fixedData[i],
+            hour: missingHour,
+            day: dayNumber,
+          });
+          gapFound = true;
+          break;
+        }
+      }
+
+      // Fallback: If no explicit gap was found, just duplicate the 2nd hour (night time)
+      if (!gapFound) {
+        fixedData.splice(2, 0, { ...fixedData[2] });
       }
     }
-    return filledData;
+
+    // AUTUMN: DST fall-back (25 hours)
+    else if (fixedData.length === 25) {
+      this.platform.log.debug(`[DST] 25-hour day detected for ${dayKey}. Truncating to 24 hours.`);
+      // Remove the duplicated extra hour (typically index 3 during the night shift)
+      fixedData.splice(3, 1);
+    }
+
+    // Ensure all hours are strictly mapped 0-23 to prevent downstream indexing errors
+    return fixedData.map((item, idx) => ({ ...item, hour: idx }));
   }
 
   /**
