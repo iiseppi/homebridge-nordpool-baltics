@@ -1,3 +1,5 @@
+To be updated..
+
 **homebridge-nordpool-cheapest-range**
 
 This Homebridge plugin allows you to automate your home based on the cheapest electricity hours within a customized time range. It is perfect for optimizing high-energy appliances like car chargers, floor heating, or water heaters.
