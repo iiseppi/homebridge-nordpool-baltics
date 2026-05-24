@@ -20,7 +20,7 @@ This Homebridge plugin creates virtual **Contact Sensors** in HomeKit. The senso
 - **Cheapest Hours**: Set how many hours the appliance needs to run within that window (e.g., the 3 cheapest hours).
 - **"Double Pulse" Reliability**: HomeKit automations can sometimes miss long, continuous states. This plugin uses a specialized "Double Pulse" strategy: every hour, the sensor briefly toggles its state to guarantee that your automations are reliably triggered, even if you create them mid-cycle.
 - **Eve App History Support**: Fully supports Fakegato-history. View your cheap/expensive hour logs beautifully graphed in the Eve app.
-- **Solar Override**: Includes support for solar panel overrides (if configured).
+- **Solar Override**: Includes support for solar panel overrides (if configured). (Not available yet!)
 
 ---
 
@@ -105,7 +105,7 @@ Tämä Homebridge-liitännäinen luo HomeKitiin virtuaalisia **Ovitunnistimia (C
   Täysi Fakegato-historiatuki. Voit tarkastella halpojen ja kalliiden tuntien historiaa kauniina graafeina Eve-sovelluksessa.
 
 - **Aurinkosähkö-ohitus (Solar Override)**  
-  Tukee aurinkopaneeliohjausta, jos ominaisuus on määritetty käyttöön.
+  Tukee aurinkopaneeliohjausta, jos ominaisuus on määritetty käyttöön. (Ei vielä käytössä)
 
 ---
 
