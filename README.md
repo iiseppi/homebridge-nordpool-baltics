@@ -67,7 +67,9 @@ To prevent accidental manual toggles by users, this plugin exposes devices as **
 }
 ```
 
+
 🇫🇮 Suomenkieliset ohjeet (Finnish)
+
 Automatisoi raskaat kodinkoneet Nordpoolin halvimpien tuntien aikana valitsemasi aikaikkunan sisällä.
 
 Tämä Homebridge-liitännäinen luo HomeKitiin virtuaalisia Ovitunnistimia (Contact Sensor). Tunnistin "aukeaa", kun sähkö on halvimmillaan määrittämäsi aikajakson sisällä. Tämän avulla voit ohjata esimerkiksi lämminvesivaraajaa, sähköauton laturia tai lämpöpumppua juuri silloin, kun se on edullisinta.
