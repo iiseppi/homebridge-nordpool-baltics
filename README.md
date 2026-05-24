@@ -74,30 +74,28 @@ Automatisoi raskaat kodinkoneet Nordpoolin halvimpien tuntien aikana valitsemasi
 
 Tämä Homebridge-liitännäinen luo HomeKitiin virtuaalisia Ovitunnistimia (Contact Sensor). Tunnistin "aukeaa", kun sähkö on halvimmillaan määrittämäsi aikajakson sisällä. Tämän avulla voit ohjata esimerkiksi lämminvesivaraajaa, sähköauton laturia tai lämpöpumppua juuri silloin, kun se on edullisinta.
 
-Ominaisuudet
-Kustomoidut aikaikkunat: Määritä, milloin laitteesi saa olla päällä (esim. vain klo 20:00–08:00 välillä).
+## Ominaisuudet
+- **Kustomoidut aikaikkunat**: Määritä, milloin laitteesi saa olla päällä (esim. vain klo 20:00–08:00 välillä).
 
-Halvimmat tunnit: Valitse, kuinka monta tuntia laitteen pitää olla päällä kyseisen aikaikkunan sisällä (esim. 3 halvinta tuntia).
+- **Halvimmat tunnit**: Valitse, kuinka monta tuntia laitteen pitää olla päällä kyseisen aikaikkunan sisällä (esim. 3 halvinta tuntia).
 
-Kaksoispulssi-varmistus (Double Pulse): HomeKit-automaatiot saattavat toisinaan jättää reagoimatta pitkään jatkuviin tiloihin. Tämä plugin käyttää  kaksoispulssitekniikkaa: sensori vaihtaa tilaansa hetkellisesti joka tasatunti, mikä takaa automaatioidesi sataprosenttisen laukeamisen, vaikka loit automaation kesken halvan jakson.
+- **Kaksoispulssi-varmistus (Double Pulse)**: HomeKit-automaatiot saattavat toisinaan jättää reagoimatta pitkään jatkuviin tiloihin. Tämä plugin käyttää kaksoispulssitekniikkaa: sensori vaihtaa tilaansa hetkellisesti joka tasatunti, mikä takaa automaatioidesi sataprosenttisen laukeamisen, vaikka loit automaation kesken halvan jakson.
 
-Eve App -historiatuki: Näet halvat ja kalliit jaksot kauniina graafina Eve-sovelluksessa (Fakegato-tuki).
+- **Eve App -historiatuki**: Näet halvat ja kalliit jaksot kauniina graafina Eve-sovelluksessa (Fakegato-tuki).
 
-Kuinka plugin toimii HomeKitissä
+##Kuinka plugin toimii HomeKitissä
 Jotta vältytään vahinkopainalluksilta, laitteet näkyvät HomeKitissä Ovitunnistimina (Contact Sensor), joiden tilaa käyttäjä ei voi itse muuttaa.
 
-AUKI (Open) = Sähkö on HALPAA. Laita laitteet päälle.
+##AUKI (Open) = Sähkö on HALPAA. Laita laitteet päälle.
 
-KIINNI (Closed) = Sähkö on KALLISTA. Laita laitteet pois päältä.
+##KIINNI (Closed) = Sähkö on KALLISTA. Laita laitteet pois päältä.
 
-Näin teet automaation Koti-sovelluksessa
-Avaa Apple Koti -sovellus -> Automaatiot -> + -> Tunnistin havaitsee jotain.
+##Näin teet automaation Koti-sovelluksessa
+1. Avaa Apple Koti -sovellus -> Automaatiot -> + -> Tunnistin havaitsee jotain.
+2. Käynnistys-automaatio: Valitse luotu sensori (esim. Lämminvesivaraaja) -> Aukeaa -> Valitse ohjattava pistorasia -> Aseta päälle.
+3. Sammutus-automaatio: Valitse sama sensori -> Sulkeutuu -> Valitse ohjattava pistorasia -> Aseta pois päältä.
 
-Käynnistys-automaatio: Valitse luotu sensori (esim. Lämminvesivaraaja) -> Aukeaa -> Valitse ohjattava pistorasia -> Aseta päälle.
-
-Sammutus-automaatio: Valitse sama sensori -> Sulkeutuu -> Valitse ohjattava pistorasia -> Aseta pois päältä.
-
-Asennus
+##Asennus
 Asenna Homebridge.
 
 Etsi Homebridgen lisäosista homebridge-nordpool-cheapest-range tai asenna terminaalista: npm install -g homebridge-nordpool-cheapest-range
