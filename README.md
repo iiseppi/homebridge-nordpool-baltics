@@ -1,40 +1,70 @@
-To be updated..
+# Homebridge Nordpool Cheapest Range
 
-**homebridge-nordpool-cheapest-range**
+<p align="center">
+  <img src="https://raw.githubusercontent.com/homebridge/branding/master/logos/homebridge-wordmark-logo-transparent.png" width="300" alt="Homebridge Logo">
+</p>
 
-This Homebridge plugin allows you to automate your home based on the cheapest electricity hours within a customized time range. It is perfect for optimizing high-energy appliances like car chargers, floor heating, or water heaters.
+<p align="center">
+  <a href="https://www.npmjs.com/package/homebridge-nordpool-cheapest-range"><img src="https://img.shields.io/npm/v/homebridge-nordpool-cheapest-range.svg" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/homebridge-nordpool-cheapest-range"><img src="https://img.shields.io/npm/dt/homebridge-nordpool-cheapest-range.svg" alt="npm downloads"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
 
-Credits
-This plugin is based on the awesome work of msegzda and his project [homebridge-nordpool-baltics](https://github.com/msegzda/homebridge-nordpool-baltics). A huge thank you to him for creating the original foundation and logic! 
-If you want to support this plugin, donate to msegzda! 
+Automate heavy appliances during the cheapest Nordpool electricity hours within your custom time windows. 
 
-Key Features
-Custom Time Windows: Find the cheapest hours specifically within a daily range (e.g., only between 00:00 and 07:00).
+This Homebridge plugin creates virtual **Contact Sensors** in HomeKit. The sensor opens (triggers) when the electricity is at its cheapest within a specific time frame that you define, allowing you to run water heaters, EV chargers, or heat pumps at the most optimal times.
 
-Eve App History: Full support for historical graphs in the Eve Home app. See exactly when your devices were in "Cheap" mode.
+*🇫🇮 Suomenkieliset ohjeet löytyvät alempaa.*
 
-Detailed Logging: Transparent logs showing the exact selected hours and their prices for the current window.
+---
 
-Contact Sensor Interface: Exposed as a virtual Contact Sensor for easy automation in the Apple Home app.
+## Features
 
-How to Install
-Set up your Homebridge environment.
+- **Custom Time Windows**: Define when your appliance can run (e.g., only between 20:00 and 08:00).
+- **Cheapest Hours**: Set how many hours the appliance needs to run within that window (e.g., the 3 cheapest hours).
+- **"Double Pulse" Reliability**: HomeKit automations can sometimes miss long, continuous states. This plugin uses a specialized "Double Pulse" strategy: every hour, the sensor briefly toggles its state to guarantee that your automations are reliably triggered, even if you create them mid-cycle.
+- **Eve App History Support**: Fully supports Fakegato-history. View your cheap/expensive hour logs beautifully graphed in the Eve app.
+- **Solar Override**: Includes support for solar panel overrides (if configured).
 
-Install the plugin via the Homebridge UI or using:
+## How It Works in HomeKit
 
-Bash
-npm install homebridge-nordpool-cheapest-range
-Configuration
+To prevent accidental manual toggles by users, this plugin exposes devices as **Contact Sensors** (Door/Window sensors). 
 
-You can configure multiple devices. Each device will appear as a Contact Sensor in HomeKit:
+* **OPEN (Contact Not Detected)** = Electricity is CHEAP. Turn your appliances ON.
+* **CLOSED (Contact Detected)** = Electricity is EXPENSIVE. Turn your appliances OFF.
 
-Name: Name of the sensor (e.g., "Water Heater Control").
+### Example Automation Setup
+1. Open the Apple Home app -> **Automations** -> **+** -> **A Sensor Detects Something**.
+2. **Turn ON Automation:** Select your Cheapest Range sensor -> *Opens* -> Select your appliance (e.g., Water Heater) -> Turn ON.
+3. **Turn OFF Automation:** Select your Cheapest Range sensor -> *Closes* -> Select your appliance -> Turn OFF.
 
-Range Start: The hour when the calculation window begins (e.g., 0 for midnight).
+## Installation
 
-Range End: The hour when the calculation window ends (e.g., 7 for 7 AM).
+1. Install Homebridge.
+2. Install this plugin: `npm install -g homebridge-nordpool-cheapest-range`
+3. Configure the plugin through the Homebridge UI or update your `config.json`.
 
-Target Cheapest Hours: How many hours within that range should the sensor be active.
+## Configuration Example
 
-Important Note: 
-To ensure maximum reliability with the Nordpool API data resets, it is highly recommended to set your range within a single day (e.g., 0 to 7). Ranges crossing midnight (e.g., 23 to 06) may behave inconsistently during the midnight hour when price data for the previous day is cleared.
+```json
+{
+  "platforms": [
+    {
+      "platform": "NordpoolCheapestRange",
+      "devices": [
+        {
+          "name": "Water Heater",
+          "cheapestHours": 3,
+          "rangeStart": 22,
+          "rangeEnd": 7
+        },
+        {
+          "name": "EV Charger",
+          "cheapestHours": 5,
+          "rangeStart": 0,
+          "rangeEnd": 23
+        }
+      ]
+    }
+  ]
+}
