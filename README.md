@@ -43,6 +43,7 @@ To prevent accidental manual toggles by users, this plugin exposes devices as **
 ## Configuration Example
 
 ```json
+    
 {
   "platforms": [
     {
@@ -64,7 +65,7 @@ To prevent accidental manual toggles by users, this plugin exposes devices as **
     }
   ]
 }
-
+```
 
 🇫🇮 Suomenkieliset ohjeet (Finnish)
 Automatisoi raskaat kodinkoneet Nordpoolin halvimpien tuntien aikana valitsemasi aikaikkunan sisällä.
