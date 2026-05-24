@@ -84,6 +84,7 @@ Tämä Homebridge-liitännäinen luo HomeKitiin virtuaalisia Ovitunnistimia (Con
 - **Eve App -historiatuki**: Näet halvat ja kalliit jaksot kauniina graafina Eve-sovelluksessa (Fakegato-tuki).
 
 ##Kuinka plugin toimii HomeKitissä
+
 Jotta vältytään vahinkopainalluksilta, laitteet näkyvät HomeKitissä Ovitunnistimina (Contact Sensor), joiden tilaa käyttäjä ei voi itse muuttaa.
 
 ##AUKI (Open) = Sähkö on HALPAA. Laita laitteet päälle.
