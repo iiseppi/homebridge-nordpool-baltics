@@ -1,18 +1,32 @@
-import { PlatformAccessory, Service, API } from 'homebridge';
+import { PlatformAccessory, API, Logging, Service } from 'homebridge';
+import { DateTime } from 'luxon';
+import { schedule } from 'node-cron';
 
+import { NordpoolPlatform } from './platform';
 import {
-  defaultPricesCache,
-  defaultAreaTimezone,
   fnc_todayKey,
   fnc_tomorrowKey,
+  defaultPricesCache,
+  defaultAreaTimezone,
 } from './settings';
 
-import { schedule } from 'node-cron';
-import { NordpoolPlatform } from './platform';
-import { DateTime } from 'luxon';
-
 // Load Fakegato-history for Eve app support
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const FakeGatoHistoryService = require('fakegato-history');
+
+type DeviceConfig = {
+  name: string;
+  cheapestHours: number | string;
+  rangeStart: number | string;
+  rangeEnd: number | string;
+};
+
+type NormalizedDeviceConfig = {
+  name: string;
+  cheapestHours: number;
+  rangeStart: number;
+  rangeEnd: number;
+};
 
 type PricePoint = {
   day: number;
@@ -24,47 +38,41 @@ type PricePointWithDate = PricePoint & {
   dateKey: string;
 };
 
-type DeviceConfig = {
-  name: string;
-  cheapestHours: number | string;
-  rangeStart: number | string;
-  rangeEnd: number | string;
+type OvernightScheduleHour = {
+  hourKey: string;
+  price: number;
+  selected: boolean;
 };
 
 type OvernightSchedule = {
-  windowStart: string;
-  windowEnd: string;
+  windowStartDate: string;
+  windowEndDate: string;
+  windowStartHour: number;
+  windowEndHour: number;
   selectedHours: string[];
-  allHours: {
-    hourKey: string;
-    price: number;
-    selected: boolean;
-  }[];
+  allHours: OvernightScheduleHour[];
   createdAt: string;
 };
 
 export class NordpoolPlatformAccessory {
   private service: Service;
   private historyService: any;
-  private pricesCache;
-  private deviceConfig: DeviceConfig;
+  private pricesCache = defaultPricesCache(this.api, this.platform.log as Logging);
+  private deviceConfig: NormalizedDeviceConfig;
 
   constructor(
     private readonly platform: NordpoolPlatform,
     private readonly accessory: PlatformAccessory,
     private readonly api: API,
   ) {
-    this.pricesCache = defaultPricesCache(this.api, this.platform.log);
-    this.deviceConfig = accessory.context.device;
-
-    this.deviceConfig = this.normaliseDeviceConfig(this.deviceConfig);
+    this.deviceConfig = this.normalizeDeviceConfig(accessory.context.device);
     this.accessory.context.device = this.deviceConfig;
 
-    this.platform.log.info(
+    this.platform.log.debug(
       `[${this.deviceConfig.name}] Loaded device config: ${JSON.stringify(this.deviceConfig)}`,
     );
 
-    this.accessory.getService(this.platform.Service.AccessoryInformation)
+    this.accessory.getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Nordpool')
       .setCharacteristic(this.platform.Characteristic.Model, 'Dynamic Price Sensor')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.accessory.UUID);
@@ -84,15 +92,20 @@ export class NordpoolPlatformAccessory {
       filename: `history_${this.accessory.UUID}.json`,
     });
 
+    // Run immediately on boot
     this.updateStatus();
 
+    // Cron expression: runs exactly at the start of every hour (XX:00:00)
     schedule('0 * * * *', () => {
-      this.platform.log.info(`[${this.deviceConfig.name}] Hourly update triggered.`);
-      this.updateStatus();
+      // Add a 7-second delay to allow prices to update and HomeKit to catch up
+      setTimeout(() => {
+        this.platform.log.debug(`[${this.deviceConfig.name}] Hourly update triggered with 7s offset.`);
+        this.updateStatus();
+      }, 7000);
     });
   }
 
-  async updateStatus(): Promise<void> {
+  async updateStatus() {
     const todayKey = fnc_todayKey(this.platform.config);
     const tomorrowKey = fnc_tomorrowKey(this.platform.config);
 
@@ -101,17 +114,18 @@ export class NordpoolPlatformAccessory {
 
     const todayPrices = this.withDateKey(cachedToday, todayKey);
     const tomorrowPrices = this.withDateKey(cachedTomorrow, tomorrowKey);
+
     const allPrices = [...todayPrices, ...tomorrowPrices];
 
     if (allPrices.length === 0) {
       this.platform.log.warn(`[${this.deviceConfig.name}] No price data available in cache yet.`);
-      this.setState(false);
+      this.setHomeKitAndHistoryState(false);
       return;
     }
 
     const isCurrentlyOn = await this.calculateCheapestStatus(allPrices, todayKey, tomorrowKey);
 
-    this.setState(isCurrentlyOn);
+    this.setHomeKitAndHistoryState(isCurrentlyOn);
   }
 
   async calculateCheapestStatus(
@@ -124,8 +138,9 @@ export class NordpoolPlatformAccessory {
 
     const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
 
-    this.platform.log.info(
-      `[${this.deviceConfig.name}] Calculating with rangeStart=${rangeStart}, rangeEnd=${rangeEnd}, cheapestHours=${cheapestHours}`,
+    this.platform.log.debug(
+      `[${this.deviceConfig.name}] Calculating with rangeStart=${rangeStart}, ` +
+      `rangeEnd=${rangeEnd}, cheapestHours=${cheapestHours}`,
     );
 
     if (rangeStart <= rangeEnd) {
@@ -150,15 +165,23 @@ export class NordpoolPlatformAccessory {
 
     if (targetHours.length === 0) {
       this.platform.log.warn(
-        `[${this.deviceConfig.name}] No price data for same-day range ${rangeStart}:00-${rangeEnd}:00.`,
+        `[${this.deviceConfig.name}] No price data for range ` +
+        `${todayKey} ${this.padHour(rangeStart)}:00-${this.padHour(rangeEnd)}:00.`,
       );
       return false;
     }
 
     const cheapestHoursArray = this.selectCheapestHours(targetHours, cheapestHours);
-    this.logSchedule(targetHours, cheapestHoursArray, todayKey, todayKey);
 
-    const currentHourKey = this.hourKey(now);
+    this.logCalculatedSchedule(
+      targetHours,
+      cheapestHoursArray,
+      todayKey,
+      todayKey,
+    );
+
+    const currentHourKey = this.dateTimeHourKey(now);
+
     return cheapestHoursArray.some(p => this.priceHourKey(p) === currentHourKey);
   }
 
@@ -170,10 +193,53 @@ export class NordpoolPlatformAccessory {
   ): Promise<boolean> {
     const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
 
-    const scheduleKey = this.overnightScheduleCacheKey(todayKey);
-    let storedSchedule: OvernightSchedule | undefined = await this.pricesCache.get(scheduleKey);
+    const currentHour = now.hour;
+    const yesterdayKey = now.minus({ day: 1 }).toFormat('yyyy-MM-dd');
 
-    if (!storedSchedule) {
+    /*
+     * Overnight behavior:
+     *
+     * 1. If current time is after midnight and still inside the overnight window
+     *    e.g. range 23-07 and now is 01:00:
+     *    - use yesterday's precomputed schedule
+     *    - if it does not exist, remain OFF
+     *
+     * 2. If current time is before the evening start
+     *    e.g. range 23-07 and now is 17:00:
+     *    - create today's upcoming overnight schedule only if tomorrow prices exist
+     *    - current state remains OFF because we are outside the active window
+     *
+     * 3. If current time is at/after rangeStart
+     *    e.g. range 23-07 and now is 23:00:
+     *    - use or create today's overnight schedule
+     */
+
+    const isMorningPartOfActiveOvernight = currentHour <= rangeEnd;
+    const isEveningPartOfActiveOvernight = currentHour >= rangeStart;
+
+    if (isMorningPartOfActiveOvernight) {
+      const activeScheduleKey = this.overnightScheduleCacheKey(yesterdayKey);
+      const activeSchedule: OvernightSchedule | undefined = await this.pricesCache.get(activeScheduleKey);
+
+      if (!activeSchedule) {
+        this.platform.log.warn(
+          `[${this.deviceConfig.name}] No precomputed overnight schedule for active window ` +
+          `${yesterdayKey} ${this.padHour(rangeStart)}:00 -> ${todayKey} ${this.padHour(rangeEnd)}:00. ` +
+          'Device remains OFF.',
+        );
+        return false;
+      }
+
+      this.logStoredOvernightSchedule(activeSchedule);
+
+      const currentHourKey = this.dateTimeHourKey(now);
+      return activeSchedule.selectedHours.includes(currentHourKey);
+    }
+
+    const upcomingScheduleKey = this.overnightScheduleCacheKey(todayKey);
+    let upcomingSchedule: OvernightSchedule | undefined = await this.pricesCache.get(upcomingScheduleKey);
+
+    if (!upcomingSchedule) {
       const targetHours = allPrices.filter(p =>
         (p.dateKey === todayKey && p.hour >= rangeStart) ||
         (p.dateKey === tomorrowKey && p.hour <= rangeEnd),
@@ -184,17 +250,20 @@ export class NordpoolPlatformAccessory {
       if (targetHours.length < expectedHours) {
         this.platform.log.warn(
           `[${this.deviceConfig.name}] Overnight schedule not created yet. ` +
-          `Need ${expectedHours} hours for ${todayKey} ${rangeStart}:00 -> ${tomorrowKey} ${rangeEnd}:00, ` +
-          `but only ${targetHours.length} hours are available. Device remains OFF.`,
+          `Need ${expectedHours} hours for ${todayKey} ${this.padHour(rangeStart)}:00 -> ` +
+          `${tomorrowKey} ${this.padHour(rangeEnd)}:00, but only ${targetHours.length} hours are available. ` +
+          'Device remains OFF.',
         );
         return false;
       }
 
       const cheapestHoursArray = this.selectCheapestHours(targetHours, cheapestHours);
 
-      storedSchedule = {
-        windowStart: `${todayKey} ${this.padHour(rangeStart)}:00`,
-        windowEnd: `${tomorrowKey} ${this.padHour(rangeEnd)}:00`,
+      upcomingSchedule = {
+        windowStartDate: todayKey,
+        windowEndDate: tomorrowKey,
+        windowStartHour: rangeStart,
+        windowEndHour: rangeEnd,
         selectedHours: cheapestHoursArray.map(p => this.priceHourKey(p)),
         allHours: this.sortChronologically(targetHours).map(p => ({
           hourKey: this.priceHourKey(p),
@@ -204,43 +273,75 @@ export class NordpoolPlatformAccessory {
         createdAt: now.toISO() || new Date().toISOString(),
       };
 
-      await this.pricesCache.set(scheduleKey, storedSchedule);
+      await this.pricesCache.set(upcomingScheduleKey, upcomingSchedule);
 
       this.platform.log.info(
-        `[${this.deviceConfig.name}] Created overnight schedule ${storedSchedule.windowStart} -> ${storedSchedule.windowEnd}.`,
+        `[${this.deviceConfig.name}] Created overnight schedule ` +
+        `${todayKey} ${this.padHour(rangeStart)}:00 -> ${tomorrowKey} ${this.padHour(rangeEnd)}:00.`,
       );
     }
 
-    this.logStoredOvernightSchedule(storedSchedule);
+    this.logStoredOvernightSchedule(upcomingSchedule);
 
-    const currentHourKey = this.hourKey(now);
-    const isInsideStoredWindow = storedSchedule.allHours.some(h => h.hourKey === currentHourKey);
-
-    if (!isInsideStoredWindow) {
+    if (!isEveningPartOfActiveOvernight) {
       return false;
     }
 
-    return storedSchedule.selectedHours.includes(currentHourKey);
+    const currentHourKey = this.dateTimeHourKey(now);
+    return upcomingSchedule.selectedHours.includes(currentHourKey);
   }
 
-  private setState(isCurrentlyOn: boolean): void {
-    // Update HomeKit status
-    const characteristic = this.platform.Characteristic.ContactSensorState;
+  private setHomeKitAndHistoryState(isCurrentlyOn: boolean): void {
+    /*
+     * DOUBLE PULSE STRATEGY FOR HOMEKIT AUTOMATIONS
+     *
+     * To ensure HomeKit automations trigger reliably even if they are created
+     * during an already active long period, pulse the state briefly to the
+     * opposite value, then set the true value.
+     */
 
-    const value = isCurrentlyOn
-      ? this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
-      : this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED;
+    if (isCurrentlyOn) {
+      // Electricity is CHEAP.
+      // Pulse strategy: Force to OFF, then back to ON after 1 second.
+      this.service.updateCharacteristic(
+        this.platform.Characteristic.ContactSensorState,
+        this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED,
+      );
 
-    this.service.updateCharacteristic(characteristic, value);
+      setTimeout(() => {
+        this.service.updateCharacteristic(
+          this.platform.Characteristic.ContactSensorState,
+          this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED,
+        );
+      }, 1000);
+    } else {
+      // Electricity is EXPENSIVE.
+      // Pulse strategy: Force to ON, then back to OFF after 1 second.
+      this.service.updateCharacteristic(
+        this.platform.Characteristic.ContactSensorState,
+        this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED,
+      );
 
-    // The 'door' type expects the 'status' key (1 = open/cheap, 0 = closed/expensive)
+      setTimeout(() => {
+        this.service.updateCharacteristic(
+          this.platform.Characteristic.ContactSensorState,
+          this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED,
+        );
+      }, 1000);
+    }
+
+    // Record the TRUE state to Fakegato History.
+    // The 'door' type expects the 'status' key:
+    // 1 = open/cheap, 0 = closed/expensive.
     this.historyService.addEntry({
       time: Math.round(new Date().getTime() / 1000),
       status: isCurrentlyOn ? 1 : 0,
     });
 
     this.platform.log.info(
-      `[${this.deviceConfig.name}] Status update: ${isCurrentlyOn ? 'ON (Cheap)' : 'OFF (Expensive)'}`,
+      `[${this.deviceConfig.name}] Status update: ` +
+      `${isCurrentlyOn ? 'ON (Cheap)' : 'OFF (Expensive)'} ` +
+      '(Pulsed to ensure automation trigger)',
     );
   }
 
@@ -253,7 +354,7 @@ export class NordpoolPlatformAccessory {
       .slice(0, Math.min(cheapestHours, targetHours.length));
   }
 
-  private logSchedule(
+  private logCalculatedSchedule(
     targetHours: PricePointWithDate[],
     cheapestHoursArray: PricePointWithDate[],
     windowStartDate: string,
@@ -268,10 +369,11 @@ export class NordpoolPlatformAccessory {
       targetHours.filter(p => !cheapestHoursArray.includes(p)),
     ).map(p => `${p.dateKey} ${this.padHour(p.hour)}:00 (${p.price})`);
 
-    this.platform.log.info(
+    this.platform.log.debug(
       `[${this.deviceConfig.name}] Schedule ` +
-      `(${windowStartDate} ${this.padHour(rangeStart)}:00-${windowEndDate} ${this.padHour(rangeEnd)}:00) ` +
-      `-> ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`,
+      `(${windowStartDate} ${this.padHour(rangeStart)}:00 -> ` +
+      `${windowEndDate} ${this.padHour(rangeEnd)}:00) ` +
+      `ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`,
     );
   }
 
@@ -284,9 +386,11 @@ export class NordpoolPlatformAccessory {
       .filter(h => !h.selected)
       .map(h => `${h.hourKey} (${h.price})`);
 
-    this.platform.log.info(
-      `[${this.deviceConfig.name}] Overnight schedule (${schedule.windowStart} -> ${schedule.windowEnd}) ` +
-      `-> ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`,
+    this.platform.log.debug(
+      `[${this.deviceConfig.name}] Overnight schedule ` +
+      `(${schedule.windowStartDate} ${this.padHour(schedule.windowStartHour)}:00 -> ` +
+      `${schedule.windowEndDate} ${this.padHour(schedule.windowEndHour)}:00) ` +
+      `ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`,
     );
   }
 
@@ -311,18 +415,26 @@ export class NordpoolPlatformAccessory {
     return `${price.dateKey} ${this.padHour(price.hour)}:00`;
   }
 
-  private hourKey(dateTime: DateTime): string {
+  private dateTimeHourKey(dateTime: DateTime): string {
     return `${dateTime.toFormat('yyyy-MM-dd')} ${dateTime.toFormat('HH')}:00`;
   }
 
-  private overnightScheduleCacheKey(todayKey: string): string {
+  private overnightScheduleCacheKey(windowStartDate: string): string {
     const { name, rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
-    return `overnight-schedule:${name}:${todayKey}:${rangeStart}-${rangeEnd}:${cheapestHours}`;
+
+    return `overnight-schedule:${name}:${windowStartDate}:${rangeStart}-${rangeEnd}:${cheapestHours}`;
   }
 
   private expectedWindowHourCount(rangeStart: number, rangeEnd: number): number {
-    // Current plugin semantics are inclusive:
-    // 23-7 means 23:00 plus 00:00, 01:00, ..., 07:00 = 9 hours.
+    /*
+     * Current plugin semantics are inclusive.
+     *
+     * Example:
+     * 23-7 means:
+     * 23:00,
+     * 00:00, 01:00, 02:00, 03:00, 04:00, 05:00, 06:00, 07:00
+     * = 9 hours.
+     */
     if (rangeStart <= rangeEnd) {
       return rangeEnd - rangeStart + 1;
     }
@@ -330,17 +442,17 @@ export class NordpoolPlatformAccessory {
     return (24 - rangeStart) + (rangeEnd + 1);
   }
 
-  private normaliseDeviceConfig(config: DeviceConfig): DeviceConfig {
+  private normalizeDeviceConfig(config: DeviceConfig): NormalizedDeviceConfig {
     return {
-      ...config,
-      cheapestHours: this.normaliseNumber(config.cheapestHours, 3),
-      rangeStart: this.normaliseHour(config.rangeStart, 0),
-      rangeEnd: this.normaliseHour(config.rangeEnd, 23),
+      name: config.name,
+      cheapestHours: this.normalizeNumber(config.cheapestHours, 3),
+      rangeStart: this.normalizeHour(config.rangeStart, 0),
+      rangeEnd: this.normalizeHour(config.rangeEnd, 23),
     };
   }
 
-  private normaliseHour(value: number | string, fallback: number): number {
-    const parsed = this.normaliseNumber(value, fallback);
+  private normalizeHour(value: number | string, fallback: number): number {
+    const parsed = this.normalizeNumber(value, fallback);
 
     if (parsed < 0) {
       return 0;
@@ -353,15 +465,17 @@ export class NordpoolPlatformAccessory {
     return parsed;
   }
 
-  private normaliseNumber(value: number | string, fallback: number): number {
+  private normalizeNumber(value: number | string, fallback: number): number {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return Math.floor(value);
     }
 
     if (typeof value === 'string') {
       const match = value.match(/\d+/);
+
       if (match) {
         const parsed = parseInt(match[0], 10);
+
         if (Number.isFinite(parsed)) {
           return parsed;
         }
