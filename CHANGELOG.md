@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.5.1]
+## [1.5.2]
 
 ### Fixed
 - **Duplicate Startup Updates**: Removed duplicate startup status update to prevent repeated calculations, duplicate Fakegato history entries, and repeated log output during plugin or child bridge startup.
@@ -50,3 +50,4 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Updated documentation with professional badges and bilingual (EN/FI) instructions.
 - Optimized API fetching schedule to run at 2 minutes past the hour to avoid server congestion.
+
