@@ -11,7 +11,6 @@ import {
 } from './settings';
 
 // Load Fakegato-history for Eve app support
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const FakeGatoHistoryService = require('fakegato-history');
 
 type DeviceConfig = {
