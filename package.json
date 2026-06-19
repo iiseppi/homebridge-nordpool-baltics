@@ -1,7 +1,7 @@
 {
   "displayName": "Nordpool Cheapest Range",
   "name": "homebridge-nordpool-cheapest-range",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "private": false,
   "description": "Homebridge plugin to create virtual sensors for the cheapest electricity hours within custom time windows using Nordpool data.",
   "homepage": "https://github.com/iiseppi/homebridge-nordpool-cheapest-range",
