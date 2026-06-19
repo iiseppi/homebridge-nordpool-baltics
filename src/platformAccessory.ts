@@ -1,26 +1,70 @@
-import { PlatformAccessory, API, Logging, Service } from 'homebridge';
-import { NordpoolPlatform } from './platform';
-import { fnc_todayKey, fnc_tomorrowKey, defaultPricesCache } from './settings';
+import { PlatformAccessory, Service, API } from 'homebridge';
+
+import {
+  defaultPricesCache,
+  defaultAreaTimezone,
+  fnc_todayKey,
+  fnc_tomorrowKey,
+} from './settings';
+
 import { schedule } from 'node-cron';
+import { NordpoolPlatform } from './platform';
+import { DateTime } from 'luxon';
 
 // Load Fakegato-history for Eve app support
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const FakeGatoHistoryService = require('fakegato-history');
+
+type PricePoint = {
+  day: number;
+  hour: number;
+  price: number;
+};
+
+type PricePointWithDate = PricePoint & {
+  dateKey: string;
+};
+
+type DeviceConfig = {
+  name: string;
+  cheapestHours: number | string;
+  rangeStart: number | string;
+  rangeEnd: number | string;
+};
+
+type OvernightSchedule = {
+  windowStart: string;
+  windowEnd: string;
+  selectedHours: string[];
+  allHours: {
+    hourKey: string;
+    price: number;
+    selected: boolean;
+  }[];
+  createdAt: string;
+};
 
 export class NordpoolPlatformAccessory {
   private service: Service;
   private historyService: any;
-  private pricesCache = defaultPricesCache(this.api, this.platform.log as Logging);
-  private deviceConfig: { name: string, cheapestHours: number, rangeStart: number, rangeEnd: number };
+  private pricesCache;
+  private deviceConfig: DeviceConfig;
 
   constructor(
     private readonly platform: NordpoolPlatform,
     private readonly accessory: PlatformAccessory,
     private readonly api: API,
   ) {
+    this.pricesCache = defaultPricesCache(this.api, this.platform.log);
     this.deviceConfig = accessory.context.device;
 
-    this.accessory.getService(this.platform.Service.AccessoryInformation)!
+    this.deviceConfig = this.normaliseDeviceConfig(this.deviceConfig);
+    this.accessory.context.device = this.deviceConfig;
+
+    this.platform.log.info(
+      `[${this.deviceConfig.name}] Loaded device config: ${JSON.stringify(this.deviceConfig)}`,
+    );
+
+    this.accessory.getService(this.platform.Service.AccessoryInformation)
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Nordpool')
       .setCharacteristic(this.platform.Characteristic.Model, 'Dynamic Price Sensor')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.accessory.UUID);
@@ -40,124 +84,294 @@ export class NordpoolPlatformAccessory {
       filename: `history_${this.accessory.UUID}.json`,
     });
 
-    // Run immediately on boot
     this.updateStatus();
 
-    // Cron expression: runs exactly at the start of every hour (XX:00:00)
     schedule('0 * * * *', () => {
-      // Add a 7-second delay (7000 milliseconds) to allow prices to update
-      // and HomeKit to catch up with the new hour safely.
-      setTimeout(() => {
-        this.platform.log.info(`[${this.deviceConfig.name}] Hourly update triggered (with 7s offset).`);
-        this.updateStatus();
-      }, 7000);
+      this.platform.log.info(`[${this.deviceConfig.name}] Hourly update triggered.`);
+      this.updateStatus();
     });
   }
 
-  async updateStatus() {
+  async updateStatus(): Promise<void> {
     const todayKey = fnc_todayKey(this.platform.config);
     const tomorrowKey = fnc_tomorrowKey(this.platform.config);
 
-    const cachedToday = await this.pricesCache.get(todayKey) || [];
-    const cachedTomorrow = await this.pricesCache.get(tomorrowKey) || [];
-    const allPrices = [...cachedToday, ...cachedTomorrow];
+    const cachedToday: PricePoint[] = await this.pricesCache.get(todayKey) || [];
+    const cachedTomorrow: PricePoint[] = await this.pricesCache.get(tomorrowKey) || [];
+
+    const todayPrices = this.withDateKey(cachedToday, todayKey);
+    const tomorrowPrices = this.withDateKey(cachedTomorrow, tomorrowKey);
+    const allPrices = [...todayPrices, ...tomorrowPrices];
 
     if (allPrices.length === 0) {
       this.platform.log.warn(`[${this.deviceConfig.name}] No price data available in cache yet.`);
+      this.setState(false);
       return;
     }
 
-    const isCurrentlyOn = this.calculateCheapestStatus(allPrices);
+    const isCurrentlyOn = await this.calculateCheapestStatus(allPrices, todayKey, tomorrowKey);
 
-    // ---------------------------------------------------------
-    // DOUBLE PULSE STRATEGY FOR HOMEKIT AUTOMATIONS
-    // ---------------------------------------------------------
-    // To ensure HomeKit automations trigger reliably even if they 
-    // are created during an already active long period (e.g. 6 hours cheap), 
-    // we pulse the state briefly to the opposite value, then set the true value.
-    
-    if (isCurrentlyOn) {
-      // Electricity is CHEAP.
-      // Pulse strategy: Force to OFF (0), then back to ON (1) after 1 second.
-      
-      this.service.updateCharacteristic(
-        this.platform.Characteristic.ContactSensorState,
-        this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED // 0 = Closed/No Motion
-      );
+    this.setState(isCurrentlyOn);
+  }
 
-      setTimeout(() => {
-        this.service.updateCharacteristic(
-          this.platform.Characteristic.ContactSensorState,
-          this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED // 1 = Open/Motion
-        );
-      }, 1000); // 1-second delay
-      
-    } else {
-      // Electricity is EXPENSIVE.
-      // Pulse strategy: Force to ON (1), then back to OFF (0) after 1 second.
-      
-      this.service.updateCharacteristic(
-        this.platform.Characteristic.ContactSensorState,
-        this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED // 1 = Open/Motion
-      );
+  async calculateCheapestStatus(
+    allPrices: PricePointWithDate[],
+    todayKey: string,
+    tomorrowKey: string,
+  ): Promise<boolean> {
+    const timezone = defaultAreaTimezone(this.platform.config);
+    const now = DateTime.local().setZone(timezone).startOf('hour');
 
-      setTimeout(() => {
-        this.service.updateCharacteristic(
-          this.platform.Characteristic.ContactSensorState,
-          this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED // 0 = Closed/No Motion
-        );
-      }, 1000); // 1-second delay
+    const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
+
+    this.platform.log.info(
+      `[${this.deviceConfig.name}] Calculating with rangeStart=${rangeStart}, rangeEnd=${rangeEnd}, cheapestHours=${cheapestHours}`,
+    );
+
+    if (rangeStart <= rangeEnd) {
+      return this.calculateSameDayStatus(allPrices, todayKey, now);
     }
 
-    // Record the TRUE state to Fakegato History
+    return this.calculateOvernightStatus(allPrices, todayKey, tomorrowKey, now);
+  }
+
+  private calculateSameDayStatus(
+    allPrices: PricePointWithDate[],
+    todayKey: string,
+    now: DateTime,
+  ): boolean {
+    const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
+
+    const targetHours = allPrices.filter(p =>
+      p.dateKey === todayKey &&
+      p.hour >= rangeStart &&
+      p.hour <= rangeEnd,
+    );
+
+    if (targetHours.length === 0) {
+      this.platform.log.warn(
+        `[${this.deviceConfig.name}] No price data for same-day range ${rangeStart}:00-${rangeEnd}:00.`,
+      );
+      return false;
+    }
+
+    const cheapestHoursArray = this.selectCheapestHours(targetHours, cheapestHours);
+    this.logSchedule(targetHours, cheapestHoursArray, todayKey, todayKey);
+
+    const currentHourKey = this.hourKey(now);
+    return cheapestHoursArray.some(p => this.priceHourKey(p) === currentHourKey);
+  }
+
+  private async calculateOvernightStatus(
+    allPrices: PricePointWithDate[],
+    todayKey: string,
+    tomorrowKey: string,
+    now: DateTime,
+  ): Promise<boolean> {
+    const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
+
+    const scheduleKey = this.overnightScheduleCacheKey(todayKey);
+    let storedSchedule: OvernightSchedule | undefined = await this.pricesCache.get(scheduleKey);
+
+    if (!storedSchedule) {
+      const targetHours = allPrices.filter(p =>
+        (p.dateKey === todayKey && p.hour >= rangeStart) ||
+        (p.dateKey === tomorrowKey && p.hour <= rangeEnd),
+      );
+
+      const expectedHours = this.expectedWindowHourCount(rangeStart, rangeEnd);
+
+      if (targetHours.length < expectedHours) {
+        this.platform.log.warn(
+          `[${this.deviceConfig.name}] Overnight schedule not created yet. ` +
+          `Need ${expectedHours} hours for ${todayKey} ${rangeStart}:00 -> ${tomorrowKey} ${rangeEnd}:00, ` +
+          `but only ${targetHours.length} hours are available. Device remains OFF.`,
+        );
+        return false;
+      }
+
+      const cheapestHoursArray = this.selectCheapestHours(targetHours, cheapestHours);
+
+      storedSchedule = {
+        windowStart: `${todayKey} ${this.padHour(rangeStart)}:00`,
+        windowEnd: `${tomorrowKey} ${this.padHour(rangeEnd)}:00`,
+        selectedHours: cheapestHoursArray.map(p => this.priceHourKey(p)),
+        allHours: this.sortChronologically(targetHours).map(p => ({
+          hourKey: this.priceHourKey(p),
+          price: p.price,
+          selected: cheapestHoursArray.includes(p),
+        })),
+        createdAt: now.toISO() || new Date().toISOString(),
+      };
+
+      await this.pricesCache.set(scheduleKey, storedSchedule);
+
+      this.platform.log.info(
+        `[${this.deviceConfig.name}] Created overnight schedule ${storedSchedule.windowStart} -> ${storedSchedule.windowEnd}.`,
+      );
+    }
+
+    this.logStoredOvernightSchedule(storedSchedule);
+
+    const currentHourKey = this.hourKey(now);
+    const isInsideStoredWindow = storedSchedule.allHours.some(h => h.hourKey === currentHourKey);
+
+    if (!isInsideStoredWindow) {
+      return false;
+    }
+
+    return storedSchedule.selectedHours.includes(currentHourKey);
+  }
+
+  private setState(isCurrentlyOn: boolean): void {
+    // Update HomeKit status
+    const characteristic = this.platform.Characteristic.ContactSensorState;
+
+    const value = isCurrentlyOn
+      ? this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
+      : this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED;
+
+    this.service.updateCharacteristic(characteristic, value);
+
     // The 'door' type expects the 'status' key (1 = open/cheap, 0 = closed/expensive)
     this.historyService.addEntry({
       time: Math.round(new Date().getTime() / 1000),
       status: isCurrentlyOn ? 1 : 0,
     });
 
-    this.platform.log.info(`[${this.deviceConfig.name}] Status update: ${isCurrentlyOn ? 'ON (Cheap)' : 'OFF (Expensive)'} (Pulsed to ensure automation trigger)`);
+    this.platform.log.info(
+      `[${this.deviceConfig.name}] Status update: ${isCurrentlyOn ? 'ON (Cheap)' : 'OFF (Expensive)'}`,
+    );
   }
 
-  calculateCheapestStatus(allPrices: any[]): boolean {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentDay = now.getDate();
-    const { rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
+  private selectCheapestHours(
+    targetHours: PricePointWithDate[],
+    cheapestHours: number,
+  ): PricePointWithDate[] {
+    return [...targetHours]
+      .sort((a, b) => a.price - b.price)
+      .slice(0, Math.min(cheapestHours, targetHours.length));
+  }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let targetHours: any[] = [];
+  private logSchedule(
+    targetHours: PricePointWithDate[],
+    cheapestHoursArray: PricePointWithDate[],
+    windowStartDate: string,
+    windowEndDate: string,
+  ): void {
+    const { rangeStart, rangeEnd } = this.deviceConfig;
 
+    const onHours = this.sortChronologically(cheapestHoursArray)
+      .map(p => `${p.dateKey} ${this.padHour(p.hour)}:00 (${p.price})`);
+
+    const offHours = this.sortChronologically(
+      targetHours.filter(p => !cheapestHoursArray.includes(p)),
+    ).map(p => `${p.dateKey} ${this.padHour(p.hour)}:00 (${p.price})`);
+
+    this.platform.log.info(
+      `[${this.deviceConfig.name}] Schedule ` +
+      `(${windowStartDate} ${this.padHour(rangeStart)}:00-${windowEndDate} ${this.padHour(rangeEnd)}:00) ` +
+      `-> ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`,
+    );
+  }
+
+  private logStoredOvernightSchedule(schedule: OvernightSchedule): void {
+    const onHours = schedule.allHours
+      .filter(h => h.selected)
+      .map(h => `${h.hourKey} (${h.price})`);
+
+    const offHours = schedule.allHours
+      .filter(h => !h.selected)
+      .map(h => `${h.hourKey} (${h.price})`);
+
+    this.platform.log.info(
+      `[${this.deviceConfig.name}] Overnight schedule (${schedule.windowStart} -> ${schedule.windowEnd}) ` +
+      `-> ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`,
+    );
+  }
+
+  private sortChronologically(hours: PricePointWithDate[]): PricePointWithDate[] {
+    return [...hours].sort((a, b) => {
+      if (a.dateKey === b.dateKey) {
+        return a.hour - b.hour;
+      }
+
+      return a.dateKey.localeCompare(b.dateKey);
+    });
+  }
+
+  private withDateKey(prices: PricePoint[], dateKey: string): PricePointWithDate[] {
+    return prices.map(p => ({
+      ...p,
+      dateKey,
+    }));
+  }
+
+  private priceHourKey(price: PricePointWithDate): string {
+    return `${price.dateKey} ${this.padHour(price.hour)}:00`;
+  }
+
+  private hourKey(dateTime: DateTime): string {
+    return `${dateTime.toFormat('yyyy-MM-dd')} ${dateTime.toFormat('HH')}:00`;
+  }
+
+  private overnightScheduleCacheKey(todayKey: string): string {
+    const { name, rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
+    return `overnight-schedule:${name}:${todayKey}:${rangeStart}-${rangeEnd}:${cheapestHours}`;
+  }
+
+  private expectedWindowHourCount(rangeStart: number, rangeEnd: number): number {
+    // Current plugin semantics are inclusive:
+    // 23-7 means 23:00 plus 00:00, 01:00, ..., 07:00 = 9 hours.
     if (rangeStart <= rangeEnd) {
-      targetHours = allPrices.filter(p => p.day === currentDay && p.hour >= rangeStart && p.hour <= rangeEnd);
-    } else {
-      targetHours = allPrices.filter(p => {
-        const isTonight = p.day === currentDay && p.hour >= rangeStart;
-        const isTomorrowMorning = p.day !== currentDay && p.hour <= rangeEnd;
-        return isTonight || isTomorrowMorning;
-      });
+      return rangeEnd - rangeStart + 1;
     }
 
-    if (targetHours.length === 0) {
-      return false;
+    return (24 - rangeStart) + (rangeEnd + 1);
+  }
+
+  private normaliseDeviceConfig(config: DeviceConfig): DeviceConfig {
+    return {
+      ...config,
+      cheapestHours: this.normaliseNumber(config.cheapestHours, 3),
+      rangeStart: this.normaliseHour(config.rangeStart, 0),
+      rangeEnd: this.normaliseHour(config.rangeEnd, 23),
+    };
+  }
+
+  private normaliseHour(value: number | string, fallback: number): number {
+    const parsed = this.normaliseNumber(value, fallback);
+
+    if (parsed < 0) {
+      return 0;
     }
 
-    const sortedWindow = [...targetHours].sort((a, b) => a.price - b.price);
-    const cheapestHoursArray = sortedWindow.slice(0, Math.min(cheapestHours, targetHours.length));
+    if (parsed > 23) {
+      return 23;
+    }
 
-    // LOGGING: Format hours with their exact prices for full transparency
-    const onHours = cheapestHoursArray
-      .sort((a, b) => a.hour - b.hour)
-      .map(p => `${p.hour}:00 (${p.price})`);
+    return parsed;
+  }
 
-    const offHours = targetHours
-      .filter(p => !cheapestHoursArray.includes(p))
-      .sort((a, b) => a.hour - b.hour)
-      .map(p => `${p.hour}:00 (${p.price})`);
+  private normaliseNumber(value: number | string, fallback: number): number {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.floor(value);
+    }
 
-    // Print a clear summary to the log including prices
-    this.platform.log.info(`[${this.deviceConfig.name}] Schedule (${rangeStart}:00-${rangeEnd}:00) -> ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`);
+    if (typeof value === 'string') {
+      const match = value.match(/\d+/);
+      if (match) {
+        const parsed = parseInt(match[0], 10);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
 
-    return cheapestHoursArray.some(p => p.hour === currentHour && p.day === currentDay);
+    return fallback;
+  }
+
+  private padHour(hour: number): string {
+    return hour.toString().padStart(2, '0');
   }
 }
