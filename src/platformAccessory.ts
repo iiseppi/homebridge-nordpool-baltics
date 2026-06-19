@@ -82,17 +82,25 @@ export class NordpoolPlatformAccessory {
 
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.deviceConfig.name);
 
-    // Fakegato requires the 'door' type for Contact Sensors
+    // Fakegato requires the 'door' type for Contact Sensors.
+    // Route Fakegato's noisy normal logs to debug level, while keeping real errors visible.
+    const fakegatoLogger = {
+      info: this.platform.log.debug.bind(this.platform.log),
+      warn: this.platform.log.debug.bind(this.platform.log),
+      error: this.platform.log.error.bind(this.platform.log),
+      debug: this.platform.log.debug.bind(this.platform.log),
+    };
+
     const FakeGatoHistory = FakeGatoHistoryService(this.api);
     this.historyService = new FakeGatoHistory('door', this.accessory, {
-      log: this.platform.log,
+      log: fakegatoLogger,
       storage: 'fs',
       path: this.api.user.storagePath() + '/accessories',
       filename: `history_${this.accessory.UUID}.json`,
     });
 
-    // Run immediately on boot
-    this.updateStatus();
+    // Do not call updateStatus() here.
+    // platform.ts runs the initial update once after prices are fetched and devices are discovered.
 
     // Cron expression: runs exactly at the start of every hour (XX:00:00)
     schedule('0 * * * *', () => {

@@ -50,7 +50,7 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
       // 3. Force initial state update for all discovered devices.
       // This ensures HomeKit gets the correct state immediately after boot.
       for (const accessory of this.activeAccessories) {
-        accessory.updateStatus();
+        await accessory.updateStatus();
       }
 
       // 4. Set up automatic price fetching from the API.
@@ -62,7 +62,7 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
         // Refresh accessories after price cache update.
         // This is useful when tomorrow's prices become available.
         for (const accessory of this.activeAccessories) {
-          accessory.updateStatus();
+          await accessory.updateStatus();
         }
       });
     });
@@ -125,6 +125,8 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
       this.log.warn('No devices found in configuration.');
       return;
     }
+
+    this.activeAccessories.length = 0;
 
     const processedUUIDs: string[] = [];
 
