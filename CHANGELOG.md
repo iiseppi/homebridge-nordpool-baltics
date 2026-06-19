@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1]
+
+### Fixed
+- **Duplicate Startup Updates**: Removed duplicate startup status update to prevent repeated calculations, duplicate Fakegato history entries, and repeated log output during plugin or child bridge startup.
+- **Fakegato Log Noise**: Routed normal Fakegato history logs to debug level while keeping real errors visible in normal logs.
+
+### Changed
+- **Startup Flow**: Initial accessory status updates are now handled centrally after prices are fetched and devices are discovered.
+
 ## [1.5.0]
 
 ### Fixed
@@ -14,7 +23,9 @@ All notable changes to this project will be documented in this file.
 - **Debug Logging**: Moved detailed schedule logs to debug level to reduce normal log noise.
 
 ## [1.4.0]
-## Skipped
+
+### Skipped
+- Version skipped to align release numbering.
 
 ## [1.3.0]
 
