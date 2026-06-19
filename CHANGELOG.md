@@ -13,6 +13,9 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Debug Logging**: Moved detailed schedule logs to debug level to reduce normal log noise.
 
+## [1.4.0]
+## Skipped
+
 ## [1.3.0]
 
 ### Fixed
