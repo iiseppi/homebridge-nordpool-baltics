@@ -1,11 +1,12 @@
 import {
   API,
   DynamicPlatformPlugin,
-  Logging,
+  Logger,
   PlatformAccessory,
   PlatformConfig,
   Service,
   Characteristic,
+  Logging,
 } from 'homebridge';
 
 import {
@@ -21,46 +22,56 @@ import { Functions } from './functions';
 import { schedule } from 'node-cron';
 
 export class NordpoolPlatform implements DynamicPlatformPlugin {
-  public readonly Service: typeof Service;
-  public readonly Characteristic: typeof Characteristic;
+  public readonly Service: typeof Service = this.api.hap.Service;
+  public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
 
   public readonly accessories: Map<string, PlatformAccessory> = new Map();
 
-  private pricesCache;
-  private fnc: Functions;
+  private readonly pricesCache = defaultPricesCache(this.api, this.log as Logging);
+  private readonly fnc = new Functions(this, this.api);
+
+  // Store references to accessory instances to trigger updates manually.
+  private readonly activeAccessories: NordpoolPlatformAccessory[] = [];
 
   constructor(
-    public readonly log: Logging,
+    public readonly log: Logger,
     public readonly config: PlatformConfig,
     public readonly api: API,
   ) {
-    this.Service = this.api.hap.Service;
-    this.Characteristic = this.api.hap.Characteristic;
-
-    this.pricesCache = defaultPricesCache(this.api, this.log);
-    this.fnc = new Functions(this, this.api);
-
     this.api.on('didFinishLaunching', async () => {
       this.log.debug('Executed didFinishLaunching callback');
 
-      // 1. Fetch prices immediately upon startup
+      // 1. Fetch prices immediately upon startup.
       await this.updatePrices();
 
-      // 2. Initialize devices
+      // 2. Initialize devices.
       this.discoverDevices();
 
-      // 3. Set up automatic update every hour at minute 1
-      // This ensures new tomorrow prices are fetched after price release.
-      schedule('1 * * * *', async () => {
+      // 3. Force initial state update for all discovered devices.
+      // This ensures HomeKit gets the correct state immediately after boot.
+      for (const accessory of this.activeAccessories) {
+        accessory.updateStatus();
+      }
+
+      // 4. Set up automatic price fetching from the API.
+      // We run this at 2 minutes past the hour to avoid hitting the API
+      // exactly on the hour when servers are busiest.
+      schedule('2 * * * *', async () => {
         await this.updatePrices();
+
+        // Refresh accessories after price cache update.
+        // This is useful when tomorrow's prices become available.
+        for (const accessory of this.activeAccessories) {
+          accessory.updateStatus();
+        }
       });
     });
   }
 
   /**
-   * Centralized function to fetch prices and store them in cache.
+   * Centralized function to fetch prices from the API and store them in the local cache.
    */
-  async updatePrices(): Promise<void> {
+  async updatePrices() {
     this.log.info('Refreshing Nordpool prices...');
 
     try {
@@ -71,21 +82,22 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
         return;
       }
 
-      // Handle solar panel price overrides
+      // Handle solar panel price overrides.
       const processedData = await this.fnc.applySolarOverride(rawData);
 
-      // Get date keys as strings, e.g. "2026-04-30"
+      // Get date keys as strings, e.g. "2026-04-30".
       const todayKey = fnc_todayKey(this.config);
       const tomorrowKey = fnc_tomorrowKey(this.config);
 
       // Extract numeric day of month from the keys to match NordpoolData.day.
-      // This is how the current plugin stores provider data.
       const todayDayNum = parseInt(todayKey.split('-').pop() || '0', 10);
       const tomorrowDayNum = parseInt(tomorrowKey.split('-').pop() || '0', 10);
 
+      // Filter data for today and tomorrow using the day numbers.
       const todayPrices = processedData.filter(p => p.day === todayDayNum);
       const tomorrowPrices = processedData.filter(p => p.day === tomorrowDayNum);
 
+      // Check and fix missing hours, e.g. daylight saving time transitions.
       const finalToday = this.fnc.fillMissingHours(todayPrices, todayKey);
 
       if (finalToday.length > 0) {
@@ -103,12 +115,12 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
     }
   }
 
-  configureAccessory(accessory: PlatformAccessory): void {
+  configureAccessory(accessory: PlatformAccessory) {
     this.log.info('Loading accessory from cache:', accessory.displayName);
     this.accessories.set(accessory.UUID, accessory);
   }
 
-  discoverDevices(): void {
+  discoverDevices() {
     if (!this.config.devices || !Array.isArray(this.config.devices)) {
       this.log.warn('No devices found in configuration.');
       return;
@@ -117,28 +129,28 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
     const processedUUIDs: string[] = [];
 
     for (const device of this.config.devices) {
-      this.log.info(`Configured device: ${JSON.stringify(device)}`);
-
       const uuid = this.api.hap.uuid.generate(device.name);
       const existingAccessory = this.accessories.get(uuid);
 
       if (existingAccessory) {
         this.log.info('Restoring existing accessory:', device.name);
 
-        // Important: always refresh cached accessory context from current config.
+        // Always refresh cached accessory context from current config.
         existingAccessory.context.device = device;
         this.api.updatePlatformAccessories([existingAccessory]);
 
-        new NordpoolPlatformAccessory(this, existingAccessory, this.api);
+        const accInstance = new NordpoolPlatformAccessory(this, existingAccessory, this.api);
+        this.activeAccessories.push(accInstance);
       } else {
         this.log.info('Adding new accessory:', device.name);
 
         const accessory = new this.api.platformAccessory(device.name, uuid);
 
-        // Important: store current config before constructing the accessory handler.
+        // Store current config before constructing the accessory handler.
         accessory.context.device = device;
 
-        new NordpoolPlatformAccessory(this, accessory, this.api);
+        const accInstance = new NordpoolPlatformAccessory(this, accessory, this.api);
+        this.activeAccessories.push(accInstance);
 
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
@@ -146,7 +158,7 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
       processedUUIDs.push(uuid);
     }
 
-    // Remove obsolete accessories
+    // Remove obsolete accessories that are no longer in the configuration.
     for (const [uuid, accessory] of this.accessories) {
       if (!processedUUIDs.includes(uuid)) {
         this.log.info('Removing accessory:', accessory.displayName);
