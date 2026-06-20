@@ -21,6 +21,10 @@ import { NordpoolPlatformAccessory } from './platformAccessory';
 import { Functions } from './functions';
 import { schedule } from 'node-cron';
 
+type PriceHour = {
+  hour: number;
+};
+
 export class NordpoolPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service = this.api.hap.Service;
   public readonly Characteristic: typeof Characteristic = this.api.hap.Characteristic;
@@ -102,13 +106,40 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
 
       if (finalToday.length > 0) {
         await this.pricesCache.set(todayKey, finalToday);
-        this.log.info(`Prices updated for today (${todayKey}). Count: ${finalToday.length}`);
+        this.log.info(
+          `Prices updated for today (${todayKey}). Count: ${finalToday.length}. ` +
+          `Hours: ${this.formatPriceHours(finalToday)}`,
+        );
       }
 
       if (tomorrowPrices.length > 0) {
         const finalTomorrow = this.fnc.fillMissingHours(tomorrowPrices, tomorrowKey);
-        await this.pricesCache.set(tomorrowKey, finalTomorrow);
-        this.log.info(`Prices updated for tomorrow (${tomorrowKey}). Count: ${finalTomorrow.length}`);
+
+        if (this.isTomorrowPriceDataUsableForConfiguredDevices(finalTomorrow)) {
+          await this.pricesCache.set(tomorrowKey, finalTomorrow);
+          this.log.info(
+            `Prices updated for tomorrow (${tomorrowKey}). Count: ${finalTomorrow.length}. ` +
+            `Hours: ${this.formatPriceHours(finalTomorrow)}`,
+          );
+        } else {
+          const cachedTomorrow: PriceHour[] = await this.pricesCache.get(tomorrowKey) || [];
+
+          if (this.isTomorrowPriceDataUsableForConfiguredDevices(cachedTomorrow)) {
+            this.log.warn(
+              `Fetched tomorrow prices for ${tomorrowKey} are incomplete. ` +
+              `Fetched Count: ${finalTomorrow.length}. Hours: ${this.formatPriceHours(finalTomorrow)}. ` +
+              `Keeping existing cached tomorrow prices. Cached Count: ${cachedTomorrow.length}.`,
+            );
+          } else {
+            this.log.warn(
+              `Fetched tomorrow prices for ${tomorrowKey} are incomplete. ` +
+              `Fetched Count: ${finalTomorrow.length}. Hours: ${this.formatPriceHours(finalTomorrow)}. ` +
+              'Not updating tomorrow cache yet.',
+            );
+          }
+        }
+      } else {
+        this.log.debug(`No tomorrow prices available yet for ${tomorrowKey}.`);
       }
     } catch (error) {
       this.log.error('Error during price update:', error);
@@ -167,5 +198,97 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
     }
+  }
+
+  private isTomorrowPriceDataUsableForConfiguredDevices(prices: PriceHour[]): boolean {
+    if (!this.hasOvernightDevices()) {
+      return prices.length > 0;
+    }
+
+    const maxRequiredTomorrowHour = this.getMaxRequiredTomorrowHourForOvernightDevices();
+
+    if (maxRequiredTomorrowHour < 0) {
+      return prices.length > 0;
+    }
+
+    const availableHours = new Set(prices.map(p => p.hour));
+
+    for (let hour = 0; hour <= maxRequiredTomorrowHour; hour++) {
+      if (!availableHours.has(hour)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private hasOvernightDevices(): boolean {
+    if (!this.config.devices || !Array.isArray(this.config.devices)) {
+      return false;
+    }
+
+    return this.config.devices.some(device => {
+      const rangeStart = this.normalizeConfigHour(device.rangeStart, 0);
+      const rangeEnd = this.normalizeConfigHour(device.rangeEnd, 23);
+
+      return rangeStart > rangeEnd;
+    });
+  }
+
+  private getMaxRequiredTomorrowHourForOvernightDevices(): number {
+    if (!this.config.devices || !Array.isArray(this.config.devices)) {
+      return -1;
+    }
+
+    let maxRequiredTomorrowHour = -1;
+
+    for (const device of this.config.devices) {
+      const rangeStart = this.normalizeConfigHour(device.rangeStart, 0);
+      const rangeEnd = this.normalizeConfigHour(device.rangeEnd, 23);
+
+      if (rangeStart > rangeEnd) {
+        maxRequiredTomorrowHour = Math.max(maxRequiredTomorrowHour, rangeEnd);
+      }
+    }
+
+    return maxRequiredTomorrowHour;
+  }
+
+  private normalizeConfigHour(value: unknown, fallback: number): number {
+    let parsed = fallback;
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      parsed = Math.floor(value);
+    }
+
+    if (typeof value === 'string') {
+      const match = value.match(/\d+/);
+
+      if (match) {
+        const numberValue = parseInt(match[0], 10);
+
+        if (Number.isFinite(numberValue)) {
+          parsed = numberValue;
+        }
+      }
+    }
+
+    if (parsed < 0) {
+      return 0;
+    }
+
+    if (parsed > 23) {
+      return 23;
+    }
+
+    return parsed;
+  }
+
+  private formatPriceHours(prices: PriceHour[]): string {
+    return prices
+      .map(p => p.hour)
+      .sort((a, b) => a - b)
+      .map(hour => hour.toString().padStart(2, '0'))
+      .join(', ');
   }
 }
