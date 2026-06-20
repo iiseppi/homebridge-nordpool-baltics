@@ -183,8 +183,6 @@ export class NordpoolPlatformAccessory {
     this.logCalculatedSchedule(
       targetHours,
       cheapestHoursArray,
-      todayKey,
-      todayKey,
     );
 
     const currentHourKey = this.dateTimeHourKey(now);
@@ -364,22 +362,19 @@ export class NordpoolPlatformAccessory {
   private logCalculatedSchedule(
     targetHours: PricePointWithDate[],
     cheapestHoursArray: PricePointWithDate[],
-    windowStartDate: string,
-    windowEndDate: string,
   ): void {
     const { rangeStart, rangeEnd } = this.deviceConfig;
 
     const onHours = this.sortChronologically(cheapestHoursArray)
-      .map(p => `${p.dateKey} ${this.padHour(p.hour)}:00 (${p.price})`);
+      .map(p => `${this.padHour(p.hour)}:00 (${p.price})`);
 
     const offHours = this.sortChronologically(
       targetHours.filter(p => !cheapestHoursArray.includes(p)),
-    ).map(p => `${p.dateKey} ${this.padHour(p.hour)}:00 (${p.price})`);
+    ).map(p => `${this.padHour(p.hour)}:00 (${p.price})`);
 
-    this.platform.log.debug(
+    this.platform.log.info(
       `[${this.deviceConfig.name}] Schedule ` +
-      `(${windowStartDate} ${this.padHour(rangeStart)}:00 -> ` +
-      `${windowEndDate} ${this.padHour(rangeEnd)}:00) ` +
+      `(${this.padHour(rangeStart)}:00 -> ${this.padHour(rangeEnd)}:00) ` +
       `ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`,
     );
   }
@@ -387,16 +382,16 @@ export class NordpoolPlatformAccessory {
   private logStoredOvernightSchedule(schedule: OvernightSchedule): void {
     const onHours = schedule.allHours
       .filter(h => h.selected)
-      .map(h => `${h.hourKey} (${h.price})`);
+      .map(h => `${h.hourKey.slice(11)} (${h.price})`);
 
     const offHours = schedule.allHours
       .filter(h => !h.selected)
-      .map(h => `${h.hourKey} (${h.price})`);
+      .map(h => `${h.hourKey.slice(11)} (${h.price})`);
 
-    this.platform.log.debug(
+    this.platform.log.info(
       `[${this.deviceConfig.name}] Overnight schedule ` +
-      `(${schedule.windowStartDate} ${this.padHour(schedule.windowStartHour)}:00 -> ` +
-      `${schedule.windowEndDate} ${this.padHour(schedule.windowEndHour)}:00) ` +
+      `(${this.padHour(schedule.windowStartHour)}:00 -> ` +
+      `${this.padHour(schedule.windowEndHour)}:00) ` +
       `ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`,
     );
   }
