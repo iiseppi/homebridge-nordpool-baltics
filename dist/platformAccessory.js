@@ -87,7 +87,7 @@ class NordpoolPlatformAccessory {
             return false;
         }
         const cheapestHoursArray = this.selectCheapestHours(targetHours, cheapestHours);
-        this.logCalculatedSchedule(targetHours, cheapestHoursArray, todayKey, todayKey);
+        this.logCalculatedSchedule(targetHours, cheapestHoursArray);
         const currentHourKey = this.dateTimeHourKey(now);
         return cheapestHoursArray.some(p => this.priceHourKey(p) === currentHourKey);
     }
@@ -205,26 +205,25 @@ class NordpoolPlatformAccessory {
             .sort((a, b) => a.price - b.price)
             .slice(0, Math.min(cheapestHours, targetHours.length));
     }
-    logCalculatedSchedule(targetHours, cheapestHoursArray, windowStartDate, windowEndDate) {
+    logCalculatedSchedule(targetHours, cheapestHoursArray) {
         const { rangeStart, rangeEnd } = this.deviceConfig;
         const onHours = this.sortChronologically(cheapestHoursArray)
-            .map(p => `${p.dateKey} ${this.padHour(p.hour)}:00 (${p.price})`);
-        const offHours = this.sortChronologically(targetHours.filter(p => !cheapestHoursArray.includes(p))).map(p => `${p.dateKey} ${this.padHour(p.hour)}:00 (${p.price})`);
-        this.platform.log.debug(`[${this.deviceConfig.name}] Schedule ` +
-            `(${windowStartDate} ${this.padHour(rangeStart)}:00 -> ` +
-            `${windowEndDate} ${this.padHour(rangeEnd)}:00) ` +
+            .map(p => `${this.padHour(p.hour)}:00 (${p.price})`);
+        const offHours = this.sortChronologically(targetHours.filter(p => !cheapestHoursArray.includes(p))).map(p => `${this.padHour(p.hour)}:00 (${p.price})`);
+        this.platform.log.info(`[${this.deviceConfig.name}] Schedule ` +
+            `(${this.padHour(rangeStart)}:00 -> ${this.padHour(rangeEnd)}:00) ` +
             `ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`);
     }
     logStoredOvernightSchedule(schedule) {
         const onHours = schedule.allHours
             .filter(h => h.selected)
-            .map(h => `${h.hourKey} (${h.price})`);
+            .map(h => `${h.hourKey.slice(11)} (${h.price})`);
         const offHours = schedule.allHours
             .filter(h => !h.selected)
-            .map(h => `${h.hourKey} (${h.price})`);
-        this.platform.log.debug(`[${this.deviceConfig.name}] Overnight schedule ` +
-            `(${schedule.windowStartDate} ${this.padHour(schedule.windowStartHour)}:00 -> ` +
-            `${schedule.windowEndDate} ${this.padHour(schedule.windowEndHour)}:00) ` +
+            .map(h => `${h.hourKey.slice(11)} (${h.price})`);
+        this.platform.log.info(`[${this.deviceConfig.name}] Overnight schedule ` +
+            `(${this.padHour(schedule.windowStartHour)}:00 -> ` +
+            `${this.padHour(schedule.windowEndHour)}:00) ` +
             `ON: [${onHours.join(', ')}] | OFF: [${offHours.join(', ')}]`);
     }
     sortChronologically(hours) {
