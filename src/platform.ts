@@ -37,6 +37,8 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
   // Store references to accessory instances to trigger updates manually.
   private readonly activeAccessories: NordpoolPlatformAccessory[] = [];
 
+  private lastCompleteTomorrowKey?: string;
+
   constructor(
     public readonly log: Logger,
     public readonly config: PlatformConfig,
@@ -53,21 +55,26 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
 
       // 3. Force initial state update for all discovered devices.
       // This ensures HomeKit gets the correct state immediately after boot.
-      for (const accessory of this.activeAccessories) {
-        await accessory.updateStatus();
-      }
+      await this.updateActiveAccessoryStatuses();
 
       // 4. Set up automatic price fetching from the API.
       // We run this at 2 minutes past the hour to avoid hitting the API
       // exactly on the hour when servers are busiest.
       schedule('2 * * * *', async () => {
-        await this.updatePrices();
+        await this.refreshPricesAndAccessories();
+      });
 
-        // Refresh accessories after price cache update.
-        // This is useful when tomorrow's prices become available.
-        for (const accessory of this.activeAccessories) {
-          await accessory.updateStatus();
+      // 5. During the common next-day price publication window, retry more often
+      // until a complete tomorrow cache has been created. This ensures overnight
+      // schedules are created soon after next-day prices become available instead
+      // of waiting until the next hourly refresh.
+      schedule('*/5 13-22 * * *', async () => {
+        if (!this.needsTomorrowPriceRefresh()) {
+          return;
         }
+
+        this.log.debug('Extra tomorrow price refresh triggered.');
+        await this.refreshPricesAndAccessories();
       });
     });
   }
@@ -117,6 +124,7 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
 
         if (this.isTomorrowPriceDataUsableForConfiguredDevices(finalTomorrow)) {
           await this.pricesCache.set(tomorrowKey, finalTomorrow);
+          this.lastCompleteTomorrowKey = tomorrowKey;
           this.log.info(
             `Prices updated for tomorrow (${tomorrowKey}). Count: ${finalTomorrow.length}. ` +
             `Hours: ${this.formatPriceHours(finalTomorrow)}`,
@@ -125,13 +133,14 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
           const cachedTomorrow: PriceHour[] = await this.pricesCache.get(tomorrowKey) || [];
 
           if (this.isTomorrowPriceDataUsableForConfiguredDevices(cachedTomorrow)) {
-            this.log.warn(
+            this.lastCompleteTomorrowKey = tomorrowKey;
+            this.log.info(
               `Fetched tomorrow prices for ${tomorrowKey} are incomplete. ` +
               `Fetched Count: ${finalTomorrow.length}. Hours: ${this.formatPriceHours(finalTomorrow)}. ` +
               `Keeping existing cached tomorrow prices. Cached Count: ${cachedTomorrow.length}.`,
             );
           } else {
-            this.log.warn(
+            this.log.info(
               `Fetched tomorrow prices for ${tomorrowKey} are incomplete. ` +
               `Fetched Count: ${finalTomorrow.length}. Hours: ${this.formatPriceHours(finalTomorrow)}. ` +
               'Not updating tomorrow cache yet.',
@@ -198,6 +207,21 @@ export class NordpoolPlatform implements DynamicPlatformPlugin {
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
     }
+  }
+
+  private async refreshPricesAndAccessories(): Promise<void> {
+    await this.updatePrices();
+    await this.updateActiveAccessoryStatuses();
+  }
+
+  private async updateActiveAccessoryStatuses(): Promise<void> {
+    for (const accessory of this.activeAccessories) {
+      await accessory.updateStatus();
+    }
+  }
+
+  private needsTomorrowPriceRefresh(): boolean {
+    return this.hasOvernightDevices() && this.lastCompleteTomorrowKey !== fnc_tomorrowKey(this.config);
   }
 
   private isTomorrowPriceDataUsableForConfiguredDevices(prices: PriceHour[]): boolean {
