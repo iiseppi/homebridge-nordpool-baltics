@@ -30,6 +30,7 @@ export declare class NordpoolPlatformAccessory {
     private priceHourKey;
     private dateTimeHourKey;
     private overnightScheduleCacheKey;
+    private expectedOvernightHourKeys;
     private expectedWindowHourCount;
     private normalizeDeviceConfig;
     private normalizeHour;

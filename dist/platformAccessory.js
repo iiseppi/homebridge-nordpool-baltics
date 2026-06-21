@@ -134,10 +134,14 @@ class NordpoolPlatformAccessory {
                 (p.dateKey === tomorrowKey && p.hour <= rangeEnd));
             const expectedHours = this.expectedWindowHourCount(rangeStart, rangeEnd);
             if (targetHours.length < expectedHours) {
-                this.platform.log.warn(`[${this.deviceConfig.name}] Overnight schedule not created yet. ` +
-                    `Need ${expectedHours} hours for ${todayKey} ${this.padHour(rangeStart)}:00 -> ` +
-                    `${tomorrowKey} ${this.padHour(rangeEnd)}:00, but only ${targetHours.length} hours are available. ` +
-                    'Device remains OFF.');
+                const expectedHourKeys = this.expectedOvernightHourKeys(todayKey, tomorrowKey, rangeStart, rangeEnd);
+                const availableHourKeys = new Set(targetHours.map(p => this.priceHourKey(p)));
+                const missingHourKeys = expectedHourKeys.filter(hourKey => !availableHourKeys.has(hourKey));
+                this.platform.log.info(`[${this.deviceConfig.name}] Waiting for complete overnight prices ` +
+                    `(${this.padHour(rangeStart)}:00 -> ${this.padHour(rangeEnd)}:00). ` +
+                    `Available ${targetHours.length}/${expectedHours} hours. ` +
+                    `Missing: [${missingHourKeys.map(h => h.slice(11)).join(', ')}]. ` +
+                    'Schedule will be created automatically when all required prices are available.');
                 return false;
             }
             const cheapestHoursArray = this.selectCheapestHours(targetHours, cheapestHours);
@@ -160,6 +164,8 @@ class NordpoolPlatformAccessory {
         }
         this.logStoredOvernightSchedule(upcomingSchedule);
         if (!isEveningPartOfActiveOvernight) {
+            this.platform.log.info(`[${this.deviceConfig.name}] Overnight schedule is ready. ` +
+                `Waiting for active window ${this.padHour(rangeStart)}:00 -> ${this.padHour(rangeEnd)}:00.`);
             return false;
         }
         const currentHourKey = this.dateTimeHourKey(now);
@@ -249,6 +255,16 @@ class NordpoolPlatformAccessory {
     overnightScheduleCacheKey(windowStartDate) {
         const { name, rangeStart, rangeEnd, cheapestHours } = this.deviceConfig;
         return `overnight-schedule:${name}:${windowStartDate}:${rangeStart}-${rangeEnd}:${cheapestHours}`;
+    }
+    expectedOvernightHourKeys(todayKey, tomorrowKey, rangeStart, rangeEnd) {
+        const keys = [];
+        for (let hour = rangeStart; hour <= 23; hour++) {
+            keys.push(`${todayKey} ${this.padHour(hour)}:00`);
+        }
+        for (let hour = 0; hour <= rangeEnd; hour++) {
+            keys.push(`${tomorrowKey} ${this.padHour(hour)}:00`);
+        }
+        return keys;
     }
     expectedWindowHourCount(rangeStart, rangeEnd) {
         /*

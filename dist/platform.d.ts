@@ -9,6 +9,7 @@ export declare class NordpoolPlatform implements DynamicPlatformPlugin {
     private readonly pricesCache;
     private readonly fnc;
     private readonly activeAccessories;
+    private lastCompleteTomorrowKey?;
     constructor(log: Logger, config: PlatformConfig, api: API);
     /**
      * Centralized function to fetch prices from the API and store them in the local cache.
@@ -16,5 +17,13 @@ export declare class NordpoolPlatform implements DynamicPlatformPlugin {
     updatePrices(): Promise<void>;
     configureAccessory(accessory: PlatformAccessory): void;
     discoverDevices(): void;
+    private refreshPricesAndAccessories;
+    private updateActiveAccessoryStatuses;
+    private needsTomorrowPriceRefresh;
+    private isTomorrowPriceDataUsableForConfiguredDevices;
+    private hasOvernightDevices;
+    private getMaxRequiredTomorrowHourForOvernightDevices;
+    private normalizeConfigHour;
+    private formatPriceHours;
 }
 //# sourceMappingURL=platform.d.ts.map
