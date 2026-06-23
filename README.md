@@ -38,6 +38,7 @@ To prevent accidental manual toggles by users, this plugin exposes devices as **
 1. Open the Apple Home app → **Automations** → **+** → **A Sensor Detects Something**.
 2. **Turn ON Automation:** Select your Cheapest Range sensor → *Opens* → Select your appliance (e.g., Water Heater) → Turn ON.
 3. **Turn OFF Automation:** Select your Cheapest Range sensor → *Closes* → Select your appliance → Turn OFF.
+4. If you are using a thermostat, first create two separate scenes: one where you set the temperature up, and another where you set it down. After that, you can trigger these scenes with an automation.
 
 ---
 
