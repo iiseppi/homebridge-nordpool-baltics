@@ -125,7 +125,8 @@ Jotta käyttäjät eivät voi vahingossa vaihtaa laitteen tilaa käsin, lisäosa
    Valitse Cheapest Range -sensori → **Aukeaa** → Valitse ohjattava laite (esim. lämminvesivaraaja) → **Laita päälle**.
 3. **Sammutusautomaatio:**  
    Valitse sama sensori → **Sulkeutuu** → Valitse ohjattava laite → **Laita pois päältä**.
-
+4. Mikäli sinulla on käytössä termostaatti, tee ensin kaksi erillistä tilannetta (sceneä) jossa toisessa asetat lämpötilan ylös,
+   ja toisessa asetat sen alas. Ja sen jälkeen voit laukausta näitä tilanteita automaation kanssa. 
 ---
 
 ## Asennus
